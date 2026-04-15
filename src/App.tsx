@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import * as XLSX from "xlsx";
 
 type Docente = {
@@ -22,10 +22,10 @@ type CriterioBase = {
   categoria: string;
   aspectos: string[];
   niveles: {
-    IV: string;
-    III: string;
-    II: string;
-    I: string;
+    AD: string;
+    A: string;
+    B: string;
+    C: string;
   };
 };
 
@@ -48,6 +48,7 @@ type Credenciales = {
 type MonitoreoDocente = {
   datosVisita: DatosVisita;
   puntajes: Record<string, number>;
+  retroalimentacion: string;
 };
 
 type Registros = Record<number, Record<number, MonitoreoDocente>>;
@@ -67,6 +68,15 @@ const DOCENTES_BASE: Docente[] = [
   { id: 7, nombre: "JUAREZ LUQUE CARLOS", grado: "6.º Primaria" },
 ];
 
+const MONITOREOS = [1, 2, 3, 4, 5];
+
+const niveles = [
+  { valor: 1, etiqueta: "En inicio", letra: "C" },
+  { valor: 2, etiqueta: "En proceso", letra: "B" },
+  { valor: 3, etiqueta: "Logro esperado", letra: "A" },
+  { valor: 4, etiqueta: "Logro destacado", letra: "AD" },
+];
+
 const RUBRICA_BASE: CriterioBase[] = [
   {
     id: "planificacion_1",
@@ -79,10 +89,10 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Secuencia de momentos pedagógicos.",
     ],
     niveles: {
-      IV: "La planificación muestra alineación ejemplar, coherencia total, evidencias auténticas y una secuencia pedagógica flexible y optimizada.",
-      III: "La planificación está alineada al modelo y currículo, presenta coherencia entre elementos, evidencias pertinentes y secuencia lógica.",
-      II: "La planificación presenta alineación parcial, coherencia débil, evidencias vagas y secuencia desorganizada.",
-      I: "No evidencia alineación, coherencia ni secuencia lógica.",
+      AD: "La planificación es clara, pertinente, alineada y presenta una secuencia pedagógica sólida con evidencias bien definidas.",
+      A: "La planificación muestra alineación adecuada y coherencia entre los elementos principales de la sesión.",
+      B: "La planificación presenta coherencia parcial y algunos vacíos en secuencia, criterios o evidencias.",
+      C: "La planificación no evidencia alineación clara ni coherencia suficiente entre sus elementos.",
     },
   },
   {
@@ -94,10 +104,10 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Adecuación de recursos didácticos.",
     ],
     niveles: {
-      IV: "El propósito es claro, motivador y contextualizado; los recursos son diversos, inclusivos y óptimos para evaluar.",
-      III: "Formula un propósito claro y significativo; selecciona recursos adecuados y alineados.",
-      II: "El propósito es vago o mal comunicado; los recursos son parcialmente adecuados.",
-      I: "No formula propósito relevante ni recursos alineados.",
+      AD: "El propósito es claro, motivador y contextualizado; los recursos son diversos, inclusivos y óptimos para evaluar.",
+      A: "Formula un propósito claro y significativo; selecciona recursos adecuados y alineados.",
+      B: "El propósito es vago o mal comunicado; los recursos son parcialmente adecuados.",
+      C: "No formula propósito relevante ni recursos alineados.",
     },
   },
   {
@@ -110,10 +120,10 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Comprensión del sentido de lo que se aprende.",
     ],
     niveles: {
-      IV: "Involucra activamente a casi todos, recupera a quienes se desconectan y promueve comprensión del sentido del aprendizaje.",
-      III: "Involucra a la gran mayoría con actividades atractivas y oportunidades de participación.",
-      II: "Involucra al menos a la mitad; ofrece algunas oportunidades, pero hay parte del grupo desinteresado.",
-      I: "No ofrece oportunidades suficientes y más de la mitad muestra desinterés.",
+      AD: "Involucra activamente a casi todos los estudiantes, recupera a quienes se desconectan y fortalece el sentido del aprendizaje.",
+      A: "Involucra a la gran mayoría con oportunidades pertinentes de participación.",
+      B: "Involucra solo a una parte del grupo y no sostiene el interés de forma constante.",
+      C: "No genera suficientes oportunidades de participación ni compromiso con el aprendizaje.",
     },
   },
   {
@@ -124,25 +134,26 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Actividades e interacciones que promueven razonamiento, creatividad o pensamiento crítico.",
     ],
     niveles: {
-      IV: "Promueve de manera efectiva el razonamiento y pensamiento crítico durante toda la sesión.",
-      III: "Promueve efectivamente el razonamiento al menos en una ocasión.",
-      II: "Intenta promoverlo, pero lo hace de manera superficial o insuficiente.",
-      I: "Se limita a actividades memorísticas o reproductivas.",
+      AD: "Promueve de manera continua y desafiante el razonamiento, la creatividad y el pensamiento crítico.",
+      A: "Promueve efectivamente el razonamiento o pensamiento crítico en momentos relevantes de la sesión.",
+      B: "Intenta promoverlo, pero de manera superficial o con poco reto cognitivo.",
+      C: "Se limita a actividades repetitivas o memorísticas.",
     },
   },
   {
     id: "aprendizaje_1",
-    criterio: "Evalúa el progreso de los aprendizajes para retroalimentar a los estudiantes y adecuar su enseñanza",
+    criterio:
+      "Evalúa el progreso de los aprendizajes para retroalimentar a los estudiantes y adecuar su enseñanza",
     categoria: "APRENDIZAJE",
     aspectos: [
       "Monitoreo del trabajo y avances.",
       "Calidad de la retroalimentación.",
     ],
     niveles: {
-      IV: "Monitorea activamente y brinda retroalimentación por descubrimiento o reflexión.",
-      III: "Monitorea activamente y brinda retroalimentación descriptiva o adapta la enseñanza.",
-      II: "Monitorea, pero solo brinda retroalimentación elemental.",
-      I: "Monitorea poco o nada y no brinda retroalimentación útil.",
+      AD: "Monitorea activamente y brinda retroalimentación reflexiva y oportuna que transforma el aprendizaje.",
+      A: "Monitorea y brinda retroalimentación descriptiva pertinente o ajusta su enseñanza.",
+      B: "Monitorea de forma parcial y brinda retroalimentación elemental.",
+      C: "Monitorea poco o nada y no brinda retroalimentación útil.",
     },
   },
   {
@@ -155,10 +166,10 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Empatía ante necesidades afectivas o físicas.",
     ],
     niveles: {
-      IV: "Siempre es respetuoso, cálido, empático e interviene ante faltas de respeto.",
-      III: "Mantiene respeto, calidez y empatía de forma consistente e interviene cuando corresponde.",
-      II: "Es respetuoso, pero frío o distante; aun así interviene ante faltas de respeto.",
-      I: "No alcanza condiciones mínimas de respeto o no interviene ante faltas.",
+      AD: "Mantiene un trato siempre respetuoso, cálido y empático, e interviene oportunamente ante faltas de respeto.",
+      A: "Genera un clima respetuoso y cercano de forma consistente.",
+      B: "Mantiene respeto básico, pero con poca cercanía o calidez.",
+      C: "No alcanza condiciones mínimas de respeto o no interviene adecuadamente.",
     },
   },
   {
@@ -170,10 +181,10 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Eficacia para sostener la continuidad de la sesión.",
     ],
     niveles: {
-      IV: "Utiliza siempre mecanismos formativos con alta eficacia y continuidad total de la sesión.",
-      III: "Utiliza predominantemente mecanismos formativos y regula de manera eficaz.",
-      II: "Usa mecanismos formativos o de control externo sin maltrato, pero con eficacia limitada.",
-      I: "Predominan mecanismos de control externo ineficaces o aparece maltrato.",
+      AD: "Regula de manera formativa, eficaz y sostenida sin afectar la continuidad de la sesión.",
+      A: "Usa mecanismos mayormente formativos y logra regular adecuadamente.",
+      B: "Regula con eficacia limitada o con estrategias poco consistentes.",
+      C: "Predominan mecanismos poco formativos o ineficaces.",
     },
   },
   {
@@ -186,10 +197,10 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Dominio de equipos tecnológicos.",
     ],
     niveles: {
-      IV: "El espacio, recursos y equipos están optimizados y el dominio tecnológico es experto y pedagógico.",
-      III: "Organiza el espacio y prepara recursos de forma ordenada; demuestra dominio técnico y pedagógico.",
-      II: "La organización dificulta parcialmente la sesión; recursos incompletos o dominio básico.",
-      I: "No organiza el espacio ni recursos y no demuestra dominio tecnológico.",
+      AD: "Organiza espacio y recursos de forma óptima y demuestra dominio técnico-pedagógico alto.",
+      A: "Gestiona adecuadamente el espacio, los materiales y los equipos necesarios.",
+      B: "La organización es parcial y algunos recursos o equipos limitan la sesión.",
+      C: "No organiza adecuadamente el espacio ni los recursos para el aprendizaje.",
     },
   },
   {
@@ -202,21 +213,12 @@ const RUBRICA_BASE: CriterioBase[] = [
       "Uso de software de gestión.",
     ],
     niveles: {
-      IV: "La plataforma y herramientas forman un ecosistema actualizado, interactivo y analítico.",
-      III: "Utiliza la plataforma, herramientas interactivas y software de gestión de forma pertinente.",
-      II: "El uso de plataforma y herramientas es esporádico o poco pertinente.",
-      I: "No utiliza la plataforma ni herramientas tecnológicas para evaluar o gestionar.",
+      AD: "Integra tecnología de manera intencional, interactiva y pedagógicamente potente.",
+      A: "Usa herramientas tecnológicas pertinentes al aprendizaje y la gestión.",
+      B: "El uso de la tecnología es esporádico o poco articulado.",
+      C: "No integra tecnología con propósito pedagógico.",
     },
   },
-];
-
-const MONITOREOS = [1, 2, 3, 4, 5];
-
-const niveles = [
-  { valor: 1, etiqueta: "En inicio" },
-  { valor: 2, etiqueta: "En proceso" },
-  { valor: 3, etiqueta: "Logro esperado" },
-  { valor: 4, etiqueta: "Logro destacado" },
 ];
 
 function getInitialDatosVisita(): DatosVisita {
@@ -227,6 +229,14 @@ function getInitialDatosVisita(): DatosVisita {
     sesion: "",
     observador: "LIC. VÁSQUEZ CCALLA YESSICA",
     observacionesGenerales: "",
+  };
+}
+
+function getInitialMonitoreo(): MonitoreoDocente {
+  return {
+    datosVisita: getInitialDatosVisita(),
+    puntajes: {},
+    retroalimentacion: "",
   };
 }
 
@@ -260,6 +270,11 @@ function agruparPorCategoria(lista: CriterioEvaluado[]) {
   return grupos;
 }
 
+function promedioMonitoreo(puntajes: Record<string, number>) {
+  const valores = RUBRICA_BASE.map((r) => puntajes[r.id] ?? 1);
+  return valores.reduce((a, b) => a + b, 0) / valores.length;
+}
+
 function descargarTexto(contenido: string, nombre: string) {
   const blob = new Blob([contenido], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -274,12 +289,7 @@ function limpiarNombreHoja(nombre: string) {
   return nombre.replace(/[\\/?*\[\]:]/g, "").slice(0, 31);
 }
 
-function promedioMonitoreo(puntajes: Record<string, number>) {
-  const valores = RUBRICA_BASE.map((r) => puntajes[r.id] ?? 1);
-  return valores.reduce((a, b) => a + b, 0) / valores.length;
-}
-
-function cardStyle(): React.CSSProperties {
+function cardStyle(): CSSProperties {
   return {
     background: "#ffffff",
     border: "1px solid #e2e8f0",
@@ -288,7 +298,7 @@ function cardStyle(): React.CSSProperties {
   };
 }
 
-function sectionTitleStyle(): React.CSSProperties {
+function sectionTitleStyle(): CSSProperties {
   return {
     fontSize: 20,
     fontWeight: 700,
@@ -296,7 +306,7 @@ function sectionTitleStyle(): React.CSSProperties {
   };
 }
 
-function buttonStyle(kind: "solid" | "outline" = "solid"): React.CSSProperties {
+function buttonStyle(kind: "solid" | "outline" = "solid"): CSSProperties {
   return kind === "solid"
     ? {
         padding: "10px 16px",
@@ -318,7 +328,7 @@ function buttonStyle(kind: "solid" | "outline" = "solid"): React.CSSProperties {
       };
 }
 
-function inputStyle(): React.CSSProperties {
+function inputStyle(): CSSProperties {
   return {
     width: "100%",
     padding: "10px 12px",
@@ -330,7 +340,7 @@ function inputStyle(): React.CSSProperties {
   };
 }
 
-function textareaStyle(minHeight = 120): React.CSSProperties {
+function textareaStyle(minHeight = 120): CSSProperties {
   return {
     width: "100%",
     padding: "10px 12px",
@@ -344,7 +354,7 @@ function textareaStyle(minHeight = 120): React.CSSProperties {
   };
 }
 
-function badgeStyle(kind: string = "default"): React.CSSProperties {
+function badgeStyle(kind: string = "default"): CSSProperties {
   if (kind === "success") return { background: "#dcfce7", color: "#166534" };
   if (kind === "primary") return { background: "#dbeafe", color: "#1d4ed8" };
   if (kind === "warning") return { background: "#fef3c7", color: "#92400e" };
@@ -362,9 +372,9 @@ function MiniChart({
   labels: string[];
   values: number[];
 }) {
-  const width = 700;
-  const height = 240;
-  const padding = 32;
+  const width = 720;
+  const height = 260;
+  const padding = 36;
   const maxValue = 4;
   const minValue = 1;
 
@@ -375,7 +385,7 @@ function MiniChart({
         : padding + (index * (width - padding * 2)) / (labels.length - 1);
     const y =
       height - padding - ((value - minValue) / (maxValue - minValue)) * (height - padding * 2);
-    return `${x},${y}`;
+    return { x, y };
   });
 
   return (
@@ -387,7 +397,7 @@ function MiniChart({
           return (
             <g key={nivel}>
               <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" />
-              <text x={8} y={y + 4} fontSize="12" fill="#64748b">
+              <text x={10} y={y + 4} fontSize="12" fill="#64748b">
                 {nivel}
               </text>
             </g>
@@ -411,27 +421,18 @@ function MiniChart({
             fill="none"
             stroke="#7c3aed"
             strokeWidth="3"
-            points={points.join(" ")}
+            points={points.map((p) => `${p.x},${p.y}`).join(" ")}
           />
         )}
 
-        {values.map((value, index) => {
-          const x =
-            labels.length === 1
-              ? width / 2
-              : padding + (index * (width - padding * 2)) / (labels.length - 1);
-          const y =
-            height - padding - ((value - minValue) / (maxValue - minValue)) * (height - padding * 2);
-
-          return (
-            <g key={`${labels[index]}-${value}`}>
-              <circle cx={x} cy={y} r={5} fill="#7c3aed" />
-              <text x={x} y={y - 10} textAnchor="middle" fontSize="12" fill="#0f172a">
-                {value.toFixed(2)}
-              </text>
-            </g>
-          );
-        })}
+        {points.map((point, index) => (
+          <g key={`${labels[index]}-${values[index]}`}>
+            <circle cx={point.x} cy={point.y} r={5} fill="#7c3aed" />
+            <text x={point.x} y={point.y - 10} textAnchor="middle" fontSize="12" fill="#0f172a">
+              {values[index].toFixed(2)}
+            </text>
+          </g>
+        ))}
       </svg>
     </div>
   );
@@ -439,7 +440,7 @@ function MiniChart({
 
 export default function App() {
   const [autenticado, setAutenticado] = useState(
-    localStorage.getItem("auth-monitoreo") === "ok"
+    typeof window !== "undefined" && localStorage.getItem("auth-monitoreo") === "ok"
   );
   const [credenciales, setCredenciales] = useState<Credenciales>({ usuario: "", clave: "" });
   const [errorLogin, setErrorLogin] = useState("");
@@ -451,26 +452,25 @@ export default function App() {
   const [monitoreoActivo, setMonitoreoActivo] = useState(1);
   const [monitoreosPromedio, setMonitoreosPromedio] = useState<number[]>([1, 2, 3, 4, 5]);
   const [monitoreosGrafico, setMonitoreosGrafico] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [retroalimentacionGenerada, setRetroalimentacionGenerada] = useState("");
   const [criterioAbierto, setCriterioAbierto] = useState<string | null>(null);
 
   const [registros, setRegistros] = useState<Registros>(() => {
+    if (typeof window === "undefined") return {};
     const raw = localStorage.getItem("registros-monitoreo");
-    if (raw) {
-      try {
-        return JSON.parse(raw) as Registros;
-      } catch {
-        return {};
-      }
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Registros;
+    } catch {
+      return {};
     }
-    return {};
   });
 
   useEffect(() => {
     localStorage.setItem("registros-monitoreo", JSON.stringify(registros));
   }, [registros]);
 
-  const usuarioActivo = localStorage.getItem("usuario-activo") || "";
+  const usuarioActivo =
+    typeof window !== "undefined" ? localStorage.getItem("usuario-activo") || "" : "";
 
   const iniciarSesion = () => {
     const usuarioValido = USUARIOS.find(
@@ -502,13 +502,11 @@ export default function App() {
   }, [busqueda, docentes]);
 
   const registroActual: MonitoreoDocente =
-    registros[docenteSeleccionado.id]?.[monitoreoActivo] || {
-      datosVisita: getInitialDatosVisita(),
-      puntajes: {},
-    };
+    registros[docenteSeleccionado.id]?.[monitoreoActivo] || getInitialMonitoreo();
 
   const datosVisita = registroActual.datosVisita;
   const evaluacionActual = registroActual.puntajes;
+  const retroalimentacionActual = registroActual.retroalimentacion || "";
 
   const promedioActual = useMemo(() => promedioMonitoreo(evaluacionActual), [evaluacionActual]);
   const estadoActual = obtenerEstado(promedioActual);
@@ -525,6 +523,8 @@ export default function App() {
             [campo]: valor,
           },
           puntajes: prev[docenteSeleccionado.id]?.[monitoreoActivo]?.puntajes || {},
+          retroalimentacion:
+            prev[docenteSeleccionado.id]?.[monitoreoActivo]?.retroalimentacion || "",
         },
       },
     }));
@@ -542,6 +542,23 @@ export default function App() {
             ...(prev[docenteSeleccionado.id]?.[monitoreoActivo]?.puntajes || {}),
             [criterioId]: valor,
           },
+          retroalimentacion:
+            prev[docenteSeleccionado.id]?.[monitoreoActivo]?.retroalimentacion || "",
+        },
+      },
+    }));
+  };
+
+  const actualizarRetroalimentacion = (valor: string) => {
+    setRegistros((prev) => ({
+      ...prev,
+      [docenteSeleccionado.id]: {
+        ...(prev[docenteSeleccionado.id] || {}),
+        [monitoreoActivo]: {
+          datosVisita:
+            prev[docenteSeleccionado.id]?.[monitoreoActivo]?.datosVisita || getInitialDatosVisita(),
+          puntajes: prev[docenteSeleccionado.id]?.[monitoreoActivo]?.puntajes || {},
+          retroalimentacion: valor,
         },
       },
     }));
@@ -552,13 +569,9 @@ export default function App() {
       ...prev,
       [docenteSeleccionado.id]: {
         ...(prev[docenteSeleccionado.id] || {}),
-        [monitoreoActivo]: {
-          datosVisita: getInitialDatosVisita(),
-          puntajes: {},
-        },
+        [monitoreoActivo]: getInitialMonitoreo(),
       },
     }));
-    setRetroalimentacionGenerada("");
   };
 
   const resumenDocentes = useMemo(() => {
@@ -584,16 +597,14 @@ export default function App() {
 
   const historialDocente = useMemo(() => {
     return MONITOREOS.map((n) => {
-      const registro = registros[docenteSeleccionado.id]?.[n] || {
-        datosVisita: getInitialDatosVisita(),
-        puntajes: {},
-      };
+      const registro = registros[docenteSeleccionado.id]?.[n] || getInitialMonitoreo();
       const promedio = promedioMonitoreo(registro.puntajes);
       const escala = obtenerEscala(promedio);
       return {
         monitoreo: n,
         datosVisita: registro.datosVisita,
         puntajes: registro.puntajes,
+        retroalimentacion: registro.retroalimentacion,
         promedio,
         escala,
       };
@@ -615,18 +626,18 @@ export default function App() {
     };
   }, [docenteSeleccionado.id, monitoreosGrafico, registros]);
 
-const toggleSeleccion = (
-  valor: number,
-  setter: React.Dispatch<React.SetStateAction<number[]>>
-) => {
-  setter((prev) => {
-    if (prev.includes(valor)) {
-      if (prev.length === 1) return prev;
-      return prev.filter((x) => x !== valor);
-    }
-    return [...prev, valor].sort((a, b) => a - b);
-  });
-};
+  const toggleSeleccion = (
+    valor: number,
+    setter: React.Dispatch<React.SetStateAction<number[]>>
+  ) => {
+    setter((prev) => {
+      if (prev.includes(valor)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((x) => x !== valor);
+      }
+      return [...prev, valor].sort((a, b) => a - b);
+    });
+  };
 
   const guardarLocal = () => {
     localStorage.setItem("registros-monitoreo", JSON.stringify(registros));
@@ -729,9 +740,8 @@ const toggleSeleccion = (
       )
       .join("\n");
 
-    const texto = `RETROALIMENTACIÓN PEDAGÓGICA
+    const texto = `RETROALIMENTACIÓN PEDAGÓGICA - MONITOREO ${monitoreoActivo}
 
-Monitoreo: ${monitoreoActivo}
 Docente: ${docente}
 Área: ${area}
 Grado: ${grado}
@@ -761,11 +771,20 @@ ${detalleCriterios}
 Observaciones generales
 ${observaciones}`;
 
-    setRetroalimentacionGenerada(texto);
-    descargarTexto(
-      texto,
-      `Retroalimentacion_${docente.replace(/\s+/g, "_")}_M${monitoreoActivo}.txt`
-    );
+    setRegistros((prev) => ({
+      ...prev,
+      [docenteSeleccionado.id]: {
+        ...(prev[docenteSeleccionado.id] || {}),
+        [monitoreoActivo]: {
+          datosVisita:
+            prev[docenteSeleccionado.id]?.[monitoreoActivo]?.datosVisita || getInitialDatosVisita(),
+          puntajes: prev[docenteSeleccionado.id]?.[monitoreoActivo]?.puntajes || {},
+          retroalimentacion: texto,
+        },
+      },
+    }));
+
+    alert(`Retroalimentación generada y guardada en Monitoreo ${monitoreoActivo}.`);
   };
 
   const exportarExcel = () => {
@@ -801,8 +820,11 @@ ${observaciones}`;
       ]);
     });
 
-    const wsResumen = XLSX.utils.aoa_to_sheet(resumenRows);
-    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen General");
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet(resumenRows),
+      "Resumen General"
+    );
 
     docentes.forEach((docente) => {
       const rows: (string | number)[][] = [
@@ -813,10 +835,7 @@ ${observaciones}`;
       ];
 
       MONITOREOS.forEach((n) => {
-        const registro = registros[docente.id]?.[n] || {
-          datosVisita: getInitialDatosVisita(),
-          puntajes: {},
-        };
+        const registro = registros[docente.id]?.[n] || getInitialMonitoreo();
         const promedio = promedioMonitoreo(registro.puntajes);
         const escala = obtenerEscala(promedio);
 
@@ -829,6 +848,7 @@ ${observaciones}`;
         rows.push(["Observaciones", registro.datosVisita.observacionesGenerales || "-"]);
         rows.push(["Promedio", Number(promedio.toFixed(2))]);
         rows.push(["Desempeño", `${escala.letra} - ${escala.texto}`]);
+        rows.push(["Retroalimentación", registro.retroalimentacion || "-"]);
         rows.push([]);
         rows.push(["Criterio", "Categoría", "Puntaje", "Nivel"]);
         RUBRICA_BASE.forEach((r) => {
@@ -850,8 +870,11 @@ ${observaciones}`;
       rows.push(["Promedio final configurable", Number(promedioFinal.toFixed(2))]);
       rows.push(["Desempeño final configurable", `${escalaFinal.letra} - ${escalaFinal.texto}`]);
 
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, limpiarNombreHoja(docente.nombre));
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet(rows),
+        limpiarNombreHoja(docente.nombre)
+      );
     });
 
     XLSX.writeFile(wb, "Monitoreo_Docente_CATA.xlsx");
@@ -1261,10 +1284,10 @@ ${observaciones}`;
                         </ul>
 
                         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                          <div><strong>Nivel IV:</strong> {item.niveles.IV}</div>
-                          <div><strong>Nivel III:</strong> {item.niveles.III}</div>
-                          <div><strong>Nivel II:</strong> {item.niveles.II}</div>
-                          <div><strong>Nivel I:</strong> {item.niveles.I}</div>
+                          <div><strong>AD:</strong> {item.niveles.AD}</div>
+                          <div><strong>A:</strong> {item.niveles.A}</div>
+                          <div><strong>B:</strong> {item.niveles.B}</div>
+                          <div><strong>C:</strong> {item.niveles.C}</div>
                         </div>
                       </div>
                     )}
@@ -1276,7 +1299,7 @@ ${observaciones}`;
                         gap: 10,
                       }}
                     >
-                      {niveles.map((nivel: { valor: number; etiqueta: string }) => {
+                      {niveles.map((nivel: { valor: number; etiqueta: string; letra: string }) => {
                         const activo = (evaluacionActual[item.id] ?? 1) === nivel.valor;
                         return (
                           <button
@@ -1292,7 +1315,8 @@ ${observaciones}`;
                               cursor: "pointer",
                             }}
                           >
-                            <div style={{ fontWeight: 600 }}>{nivel.etiqueta}</div>
+                            <div style={{ fontWeight: 700 }}>{nivel.letra}</div>
+                            <div style={{ marginTop: 4, fontSize: 13 }}>{nivel.etiqueta}</div>
                             <div
                               style={{
                                 marginTop: 6,
@@ -1325,7 +1349,7 @@ ${observaciones}`;
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
                   <button onClick={generarRetroalimentacion} style={buttonStyle("solid")}>
-                    Generar retroalimentación
+                    Generar retroalimentación del monitoreo
                   </button>
                   <button onClick={guardarLocal} style={buttonStyle("solid")}>
                     Guardar registros
@@ -1336,23 +1360,23 @@ ${observaciones}`;
                   <button
                     onClick={() =>
                       descargarTexto(
-                        retroalimentacionGenerada,
-                        `Retroalimentacion_M${monitoreoActivo}.txt`
+                        retroalimentacionActual,
+                        `Retroalimentacion_${docenteSeleccionado.nombre.replace(/\s+/g, "_")}_M${monitoreoActivo}.txt`
                       )
                     }
                     style={buttonStyle("outline")}
                   >
-                    Descargar retroalimentación
+                    Descargar retroalimentación del monitoreo
                   </button>
                 </div>
 
                 <div>
                   <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-                    Retroalimentación generada
+                    Retroalimentación guardada en este monitoreo
                   </label>
                   <textarea
-                    value={retroalimentacionGenerada}
-                    onChange={(e) => setRetroalimentacionGenerada(e.target.value)}
+                    value={retroalimentacionActual}
+                    onChange={(e) => actualizarRetroalimentacion(e.target.value)}
                     placeholder="Aquí aparecerá la retroalimentación generada..."
                     style={textareaStyle(260)}
                   />
@@ -1380,8 +1404,12 @@ ${observaciones}`;
                         <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M3</th>
                         <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M4</th>
                         <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M5</th>
-                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Promedio general</th>
-                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Desempeño final</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                          Promedio general
+                        </th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                          Desempeño final
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1498,8 +1526,23 @@ ${observaciones}`;
                     </div>
 
                     <div style={{ marginTop: 12 }}>
-                      <strong>Observaciones:</strong>{" "}
-                      {item.datosVisita.observacionesGenerales || "-"}
+                      <strong>Observaciones:</strong> {item.datosVisita.observacionesGenerales || "-"}
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <strong>Retroalimentación:</strong>
+                      <div
+                        style={{
+                          marginTop: 8,
+                          whiteSpace: "pre-wrap",
+                          background: "#f8fafc",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 12,
+                          padding: 12,
+                        }}
+                      >
+                        {item.retroalimentacion || "Sin retroalimentación generada."}
+                      </div>
                     </div>
                   </div>
                 ))}
