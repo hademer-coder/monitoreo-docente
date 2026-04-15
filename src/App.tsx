@@ -245,13 +245,12 @@ export default function App() {
   const evaluacionActual = evaluaciones[claveDocente] || {};
 
   const promedio = useMemo(() => {
-    const valores = rubricaBase
-      .map((r) => evaluacionActual[r.id])
-      .filter((v): v is number => typeof v === "number");
+  const valores = rubricaBase.map((r) => {
+    return evaluacionActual[r.id] ?? 1; // 👈 si no está marcado = 1 (C)
+  });
 
-    if (!valores.length) return 0;
-    return valores.reduce((a, b) => a + b, 0) / valores.length;
-  }, [evaluacionActual]);
+  return valores.reduce((a, b) => a + b, 0) / valores.length;
+}, [evaluacionActual]);
 
   const estado = obtenerEstado(promedio);
   const escala = obtenerEscala(promedio);
