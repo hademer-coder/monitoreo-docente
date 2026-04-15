@@ -212,6 +212,13 @@ const RUBRICA_BASE: CriterioBase[] = [
 
 const MONITOREOS = [1, 2, 3, 4, 5];
 
+const niveles = [
+  { valor: 1, etiqueta: "En inicio" },
+  { valor: 2, etiqueta: "En proceso" },
+  { valor: 3, etiqueta: "Logro esperado" },
+  { valor: 4, etiqueta: "Logro destacado" },
+];
+
 function getInitialDatosVisita(): DatosVisita {
   return {
     fecha: "",
@@ -608,19 +615,18 @@ export default function App() {
     };
   }, [docenteSeleccionado.id, monitoreosGrafico, registros]);
 
-  const toggleSeleccion = (
-    valor: number,
-    lista: number[],
-    setter: React.Dispatch<React.SetStateAction<number[]>>
-  ) => {
-    setter((prev) => {
-      if (prev.includes(valor)) {
-        if (prev.length === 1) return prev;
-        return prev.filter((x) => x !== valor);
-      }
-      return [...prev, valor].sort((a, b) => a - b);
-    });
-  };
+const toggleSeleccion = (
+  valor: number,
+  setter: React.Dispatch<React.SetStateAction<number[]>>
+) => {
+  setter((prev) => {
+    if (prev.includes(valor)) {
+      if (prev.length === 1) return prev;
+      return prev.filter((x) => x !== valor);
+    }
+    return [...prev, valor].sort((a, b) => a - b);
+  });
+};
 
   const guardarLocal = () => {
     localStorage.setItem("registros-monitoreo", JSON.stringify(registros));
@@ -993,7 +999,7 @@ ${observaciones}`;
             {MONITOREOS.map((n) => (
               <button
                 key={n}
-                onClick={() => toggleSeleccion(n, monitoreosPromedio, setMonitoreosPromedio)}
+                onClick={() => toggleSeleccion(n, setMonitoreosPromedio)}
                 style={buttonStyle(monitoreosPromedio.includes(n) ? "solid" : "outline")}
               >
                 M{n}
@@ -1270,7 +1276,7 @@ ${observaciones}`;
                         gap: 10,
                       }}
                     >
-                      {niveles.map((nivel) => {
+                      {niveles.map((nivel: { valor: number; etiqueta: string }) => {
                         const activo = (evaluacionActual[item.id] ?? 1) === nivel.valor;
                         return (
                           <button
@@ -1430,7 +1436,7 @@ ${observaciones}`;
                   {MONITOREOS.map((n) => (
                     <button
                       key={n}
-                      onClick={() => toggleSeleccion(n, monitoreosGrafico, setMonitoreosGrafico)}
+                      onClick={() => toggleSeleccion(n, setMonitoreosGrafico)}
                       style={buttonStyle(monitoreosGrafico.includes(n) ? "solid" : "outline")}
                     >
                       Mostrar M{n}
