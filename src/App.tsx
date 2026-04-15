@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 
 type Docente = {
   id: number;
@@ -15,29 +16,48 @@ type DatosVisita = {
   observacionesGenerales: string;
 };
 
+type CriterioBase = {
+  id: string;
+  criterio: string;
+  categoria: string;
+  aspectos: string[];
+  niveles: {
+    IV: string;
+    III: string;
+    II: string;
+    I: string;
+  };
+};
+
 type CriterioEvaluado = {
   id: string;
   criterio: string;
-  descripcion: string;
   categoria: string;
   puntaje: number;
   letra: string;
   nivel: string;
 };
 
-type VistaActiva = "evaluacion" | "resumen";
+type VistaActiva = "evaluacion" | "resumen" | "grafico" | "historial";
 
 type Credenciales = {
   usuario: string;
   clave: string;
 };
 
+type MonitoreoDocente = {
+  datosVisita: DatosVisita;
+  puntajes: Record<string, number>;
+};
+
+type Registros = Record<number, Record<number, MonitoreoDocente>>;
+
 const USUARIOS = [
   { usuario: "ademer", clave: "CATA2026" },
   { usuario: "yessica", clave: "CATA2026" },
 ];
 
-const docentesBase: Docente[] = [
+const DOCENTES_BASE: Docente[] = [
   { id: 1, nombre: "QUICANO CONDORI KATY PAOLA", grado: "Inicial" },
   { id: 2, nombre: "SANCA COA ALVITH NINOSKA", grado: "1.º Primaria" },
   { id: 3, nombre: "ARPASI CHAHUARES NELIDA", grado: "2.º Primaria" },
@@ -47,70 +67,161 @@ const docentesBase: Docente[] = [
   { id: 7, nombre: "JUAREZ LUQUE CARLOS", grado: "6.º Primaria" },
 ];
 
-const rubricaBase = [
+const RUBRICA_BASE: CriterioBase[] = [
   {
     id: "planificacion_1",
     criterio: "Planifica y diseña secuencias de aprendizaje",
-    descripcion: "Organiza adecuadamente los procesos pedagógicos y la secuencia didáctica.",
     categoria: "PLANIFICACIÓN",
+    aspectos: [
+      "Alineación al modelo educativo y curricular.",
+      "Coherencia entre competencia, capacidad, desempeño, criterio y evidencia.",
+      "Diseño de evidencias de aprendizaje.",
+      "Secuencia de momentos pedagógicos.",
+    ],
+    niveles: {
+      IV: "La planificación muestra alineación ejemplar, coherencia total, evidencias auténticas y una secuencia pedagógica flexible y optimizada.",
+      III: "La planificación está alineada al modelo y currículo, presenta coherencia entre elementos, evidencias pertinentes y secuencia lógica.",
+      II: "La planificación presenta alineación parcial, coherencia débil, evidencias vagas y secuencia desorganizada.",
+      I: "No evidencia alineación, coherencia ni secuencia lógica.",
+    },
   },
   {
     id: "planificacion_2",
     criterio: "Diseña experiencias y recursos evaluativos",
-    descripcion: "Elabora actividades e instrumentos coherentes con los aprendizajes.",
     categoria: "PLANIFICACIÓN",
+    aspectos: [
+      "Propósito de sesión significativo.",
+      "Adecuación de recursos didácticos.",
+    ],
+    niveles: {
+      IV: "El propósito es claro, motivador y contextualizado; los recursos son diversos, inclusivos y óptimos para evaluar.",
+      III: "Formula un propósito claro y significativo; selecciona recursos adecuados y alineados.",
+      II: "El propósito es vago o mal comunicado; los recursos son parcialmente adecuados.",
+      I: "No formula propósito relevante ni recursos alineados.",
+    },
   },
   {
     id: "ensenanza_1",
     criterio: "Involucra activamente a los estudiantes en el proceso de aprendizaje",
-    descripcion: "Promueve participación activa y aprendizaje significativo.",
     categoria: "ENSEÑANZA",
+    aspectos: [
+      "Acciones para promover el interés.",
+      "Proporción de estudiantes involucrados.",
+      "Comprensión del sentido de lo que se aprende.",
+    ],
+    niveles: {
+      IV: "Involucra activamente a casi todos, recupera a quienes se desconectan y promueve comprensión del sentido del aprendizaje.",
+      III: "Involucra a la gran mayoría con actividades atractivas y oportunidades de participación.",
+      II: "Involucra al menos a la mitad; ofrece algunas oportunidades, pero hay parte del grupo desinteresado.",
+      I: "No ofrece oportunidades suficientes y más de la mitad muestra desinterés.",
+    },
   },
   {
     id: "ensenanza_2",
     criterio: "Promueve el razonamiento, la creatividad y/o el pensamiento crítico",
-    descripcion: "Desarrolla habilidades superiores en los estudiantes.",
     categoria: "ENSEÑANZA",
+    aspectos: [
+      "Actividades e interacciones que promueven razonamiento, creatividad o pensamiento crítico.",
+    ],
+    niveles: {
+      IV: "Promueve de manera efectiva el razonamiento y pensamiento crítico durante toda la sesión.",
+      III: "Promueve efectivamente el razonamiento al menos en una ocasión.",
+      II: "Intenta promoverlo, pero lo hace de manera superficial o insuficiente.",
+      I: "Se limita a actividades memorísticas o reproductivas.",
+    },
   },
   {
     id: "aprendizaje_1",
-    criterio:
-      "Evalúa el progreso de los aprendizajes para retroalimentar a los estudiantes y adecuar su enseñanza",
-    descripcion: "Recoge evidencias, retroalimenta oportunamente y ajusta su práctica pedagógica.",
+    criterio: "Evalúa el progreso de los aprendizajes para retroalimentar a los estudiantes y adecuar su enseñanza",
     categoria: "APRENDIZAJE",
+    aspectos: [
+      "Monitoreo del trabajo y avances.",
+      "Calidad de la retroalimentación.",
+    ],
+    niveles: {
+      IV: "Monitorea activamente y brinda retroalimentación por descubrimiento o reflexión.",
+      III: "Monitorea activamente y brinda retroalimentación descriptiva o adapta la enseñanza.",
+      II: "Monitorea, pero solo brinda retroalimentación elemental.",
+      I: "Monitorea poco o nada y no brinda retroalimentación útil.",
+    },
   },
   {
     id: "sociedad_1",
     criterio: "Propicia un ambiente de respeto y proximidad",
-    descripcion: "Fomenta un clima positivo, de confianza y buen trato en el aula.",
     categoria: "SOCIEDAD",
+    aspectos: [
+      "Trato respetuoso.",
+      "Cordialidad y calidez.",
+      "Empatía ante necesidades afectivas o físicas.",
+    ],
+    niveles: {
+      IV: "Siempre es respetuoso, cálido, empático e interviene ante faltas de respeto.",
+      III: "Mantiene respeto, calidez y empatía de forma consistente e interviene cuando corresponde.",
+      II: "Es respetuoso, pero frío o distante; aun así interviene ante faltas de respeto.",
+      I: "No alcanza condiciones mínimas de respeto o no interviene ante faltas.",
+    },
   },
   {
     id: "sociedad_2",
     criterio: "Regula positivamente el comportamiento de los estudiantes",
-    descripcion: "Aplica normas y estrategias formativas para favorecer la convivencia.",
     categoria: "SOCIEDAD",
+    aspectos: [
+      "Mecanismos formativos, de control externo o maltrato.",
+      "Eficacia para sostener la continuidad de la sesión.",
+    ],
+    niveles: {
+      IV: "Utiliza siempre mecanismos formativos con alta eficacia y continuidad total de la sesión.",
+      III: "Utiliza predominantemente mecanismos formativos y regula de manera eficaz.",
+      II: "Usa mecanismos formativos o de control externo sin maltrato, pero con eficacia limitada.",
+      I: "Predominan mecanismos de control externo ineficaces o aparece maltrato.",
+    },
   },
   {
     id: "tecnologia_1",
     criterio: "Gestiona espacios y recursos didácticos",
-    descripcion: "Organiza el aula, materiales y recursos de manera eficiente para el aprendizaje.",
     categoria: "TECNOLOGÍA",
+    aspectos: [
+      "Gestión intencional del espacio.",
+      "Preparación y disponibilidad de recursos.",
+      "Dominio de equipos tecnológicos.",
+    ],
+    niveles: {
+      IV: "El espacio, recursos y equipos están optimizados y el dominio tecnológico es experto y pedagógico.",
+      III: "Organiza el espacio y prepara recursos de forma ordenada; demuestra dominio técnico y pedagógico.",
+      II: "La organización dificulta parcialmente la sesión; recursos incompletos o dominio básico.",
+      I: "No organiza el espacio ni recursos y no demuestra dominio tecnológico.",
+    },
   },
   {
     id: "tecnologia_2",
     criterio: "Integra tecnología en el proceso de aprendizaje",
-    descripcion: "Utiliza herramientas tecnológicas con propósito pedagógico.",
     categoria: "TECNOLOGÍA",
+    aspectos: [
+      "Uso de plataforma educativa.",
+      "Herramientas tecnológicas interactivas.",
+      "Uso de software de gestión.",
+    ],
+    niveles: {
+      IV: "La plataforma y herramientas forman un ecosistema actualizado, interactivo y analítico.",
+      III: "Utiliza la plataforma, herramientas interactivas y software de gestión de forma pertinente.",
+      II: "El uso de plataforma y herramientas es esporádico o poco pertinente.",
+      I: "No utiliza la plataforma ni herramientas tecnológicas para evaluar o gestionar.",
+    },
   },
-] as const;
-
-const niveles = [
-  { valor: 1, etiqueta: "En inicio" },
-  { valor: 2, etiqueta: "En proceso" },
-  { valor: 3, etiqueta: "Logro esperado" },
-  { valor: 4, etiqueta: "Logro destacado" },
 ];
+
+const MONITOREOS = [1, 2, 3, 4, 5];
+
+function getInitialDatosVisita(): DatosVisita {
+  return {
+    fecha: "",
+    hora: "",
+    area: "",
+    sesion: "",
+    observador: "LIC. VÁSQUEZ CCALLA YESSICA",
+    observacionesGenerales: "",
+  };
+}
 
 function obtenerEstado(promedio: number) {
   if (promedio >= 3.5) return { texto: "Logro destacado", clase: "success" };
@@ -150,6 +261,15 @@ function descargarTexto(contenido: string, nombre: string) {
   a.download = nombre;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function limpiarNombreHoja(nombre: string) {
+  return nombre.replace(/[\\/?*\[\]:]/g, "").slice(0, 31);
+}
+
+function promedioMonitoreo(puntajes: Record<string, number>) {
+  const valores = RUBRICA_BASE.map((r) => puntajes[r.id] ?? 1);
+  return valores.reduce((a, b) => a + b, 0) / valores.length;
 }
 
 function cardStyle(): React.CSSProperties {
@@ -228,32 +348,120 @@ function badgeStyle(kind: string = "default"): React.CSSProperties {
   return { background: "#f1f5f9", color: "#334155" };
 }
 
+function MiniChart({
+  labels,
+  values,
+}: {
+  labels: string[];
+  values: number[];
+}) {
+  const width = 700;
+  const height = 240;
+  const padding = 32;
+  const maxValue = 4;
+  const minValue = 1;
+
+  const points = values.map((value, index) => {
+    const x =
+      labels.length === 1
+        ? width / 2
+        : padding + (index * (width - padding * 2)) / (labels.length - 1);
+    const y =
+      height - padding - ((value - minValue) / (maxValue - minValue)) * (height - padding * 2);
+    return `${x},${y}`;
+  });
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg width={width} height={height} style={{ background: "#fff", borderRadius: 12 }}>
+        {[1, 2, 3, 4].map((nivel) => {
+          const y =
+            height - padding - ((nivel - minValue) / (maxValue - minValue)) * (height - padding * 2);
+          return (
+            <g key={nivel}>
+              <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" />
+              <text x={8} y={y + 4} fontSize="12" fill="#64748b">
+                {nivel}
+              </text>
+            </g>
+          );
+        })}
+
+        {labels.map((label, index) => {
+          const x =
+            labels.length === 1
+              ? width / 2
+              : padding + (index * (width - padding * 2)) / (labels.length - 1);
+          return (
+            <text key={label} x={x} y={height - 8} textAnchor="middle" fontSize="12" fill="#475569">
+              {label}
+            </text>
+          );
+        })}
+
+        {points.length > 1 && (
+          <polyline
+            fill="none"
+            stroke="#7c3aed"
+            strokeWidth="3"
+            points={points.join(" ")}
+          />
+        )}
+
+        {values.map((value, index) => {
+          const x =
+            labels.length === 1
+              ? width / 2
+              : padding + (index * (width - padding * 2)) / (labels.length - 1);
+          const y =
+            height - padding - ((value - minValue) / (maxValue - minValue)) * (height - padding * 2);
+
+          return (
+            <g key={`${labels[index]}-${value}`}>
+              <circle cx={x} cy={y} r={5} fill="#7c3aed" />
+              <text x={x} y={y - 10} textAnchor="middle" fontSize="12" fill="#0f172a">
+                {value.toFixed(2)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export default function App() {
   const [autenticado, setAutenticado] = useState(
     localStorage.getItem("auth-monitoreo") === "ok"
   );
-
-  const [credenciales, setCredenciales] = useState<Credenciales>({
-    usuario: "",
-    clave: "",
-  });
-
+  const [credenciales, setCredenciales] = useState<Credenciales>({ usuario: "", clave: "" });
   const [errorLogin, setErrorLogin] = useState("");
 
   const [busqueda, setBusqueda] = useState("");
-  const [docentes] = useState<Docente[]>(docentesBase);
-  const [docenteSeleccionado, setDocenteSeleccionado] = useState<Docente>(docentesBase[0]);
-  const [evaluaciones, setEvaluaciones] = useState<Record<number, Record<string, number>>>({});
-  const [datosVisita, setDatosVisita] = useState<DatosVisita>({
-    fecha: "",
-    hora: "",
-    area: "",
-    sesion: "",
-    observador: "LIC. VÁSQUEZ CCALLA YESSICA",
-    observacionesGenerales: "",
-  });
-  const [retroalimentacionGenerada, setRetroalimentacionGenerada] = useState("");
+  const [docentes] = useState<Docente[]>(DOCENTES_BASE);
+  const [docenteSeleccionado, setDocenteSeleccionado] = useState<Docente>(DOCENTES_BASE[0]);
   const [vistaActiva, setVistaActiva] = useState<VistaActiva>("evaluacion");
+  const [monitoreoActivo, setMonitoreoActivo] = useState(1);
+  const [monitoreosPromedio, setMonitoreosPromedio] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [monitoreosGrafico, setMonitoreosGrafico] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [retroalimentacionGenerada, setRetroalimentacionGenerada] = useState("");
+  const [criterioAbierto, setCriterioAbierto] = useState<string | null>(null);
+
+  const [registros, setRegistros] = useState<Registros>(() => {
+    const raw = localStorage.getItem("registros-monitoreo");
+    if (raw) {
+      try {
+        return JSON.parse(raw) as Registros;
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem("registros-monitoreo", JSON.stringify(registros));
+  }, [registros]);
 
   const usuarioActivo = localStorage.getItem("usuario-activo") || "";
 
@@ -286,76 +494,137 @@ export default function App() {
     );
   }, [busqueda, docentes]);
 
-  const claveDocente = docenteSeleccionado.id;
-  const evaluacionActual = evaluaciones[claveDocente] || {};
-
-  const promedio = useMemo(() => {
-    const valores = rubricaBase.map((r) => evaluacionActual[r.id] ?? 1);
-    return valores.reduce((a, b) => a + b, 0) / valores.length;
-  }, [evaluacionActual]);
-
-  const estado = obtenerEstado(promedio);
-  const escala = obtenerEscala(promedio);
-
-  const resumenDocentes = docentes.map((docente) => {
-    const puntajesDocente = evaluaciones[docente.id] || {};
-    const valores = rubricaBase.map((r) => puntajesDocente[r.id] ?? 1);
-    const promedioDocente = valores.reduce((a, b) => a + b, 0) / valores.length;
-
-    return {
-      ...docente,
-      promedio: promedioDocente,
-      escala: obtenerEscala(promedioDocente),
-      criteriosEvaluados: rubricaBase.length,
+  const registroActual: MonitoreoDocente =
+    registros[docenteSeleccionado.id]?.[monitoreoActivo] || {
+      datosVisita: getInitialDatosVisita(),
+      puntajes: {},
     };
-  });
 
-  const actualizarPuntaje = (criterioId: string, valor: number) => {
-    setEvaluaciones((prev) => ({
+  const datosVisita = registroActual.datosVisita;
+  const evaluacionActual = registroActual.puntajes;
+
+  const promedioActual = useMemo(() => promedioMonitoreo(evaluacionActual), [evaluacionActual]);
+  const estadoActual = obtenerEstado(promedioActual);
+  const escalaActual = obtenerEscala(promedioActual);
+
+  const actualizarDatosVisita = (campo: keyof DatosVisita, valor: string) => {
+    setRegistros((prev) => ({
       ...prev,
-      [claveDocente]: {
-        ...prev[claveDocente],
-        [criterioId]: valor,
+      [docenteSeleccionado.id]: {
+        ...(prev[docenteSeleccionado.id] || {}),
+        [monitoreoActivo]: {
+          datosVisita: {
+            ...(prev[docenteSeleccionado.id]?.[monitoreoActivo]?.datosVisita || getInitialDatosVisita()),
+            [campo]: valor,
+          },
+          puntajes: prev[docenteSeleccionado.id]?.[monitoreoActivo]?.puntajes || {},
+        },
       },
     }));
   };
 
-  const reiniciarRubrica = () => {
-    setEvaluaciones((prev) => ({
+  const actualizarPuntaje = (criterioId: string, valor: number) => {
+    setRegistros((prev) => ({
       ...prev,
-      [claveDocente]: {},
+      [docenteSeleccionado.id]: {
+        ...(prev[docenteSeleccionado.id] || {}),
+        [monitoreoActivo]: {
+          datosVisita:
+            prev[docenteSeleccionado.id]?.[monitoreoActivo]?.datosVisita || getInitialDatosVisita(),
+          puntajes: {
+            ...(prev[docenteSeleccionado.id]?.[monitoreoActivo]?.puntajes || {}),
+            [criterioId]: valor,
+          },
+        },
+      },
     }));
-    setDatosVisita((prev) => ({
+  };
+
+  const reiniciarMonitoreoActual = () => {
+    setRegistros((prev) => ({
       ...prev,
-      observacionesGenerales: "",
+      [docenteSeleccionado.id]: {
+        ...(prev[docenteSeleccionado.id] || {}),
+        [monitoreoActivo]: {
+          datosVisita: getInitialDatosVisita(),
+          puntajes: {},
+        },
+      },
     }));
     setRetroalimentacionGenerada("");
   };
 
-  const guardarLocal = () => {
-    const payload = {
-      docente: docenteSeleccionado,
-      visita: datosVisita,
-      puntajes: evaluaciones[claveDocente] || {},
-      promedio,
-      escala,
-      retroalimentacionGenerada,
-      usuarioActivo,
-      fechaGuardado: new Date().toLocaleString(),
-    };
+  const resumenDocentes = useMemo(() => {
+    return docentes.map((docente) => {
+      const promediosPorMonitoreo = MONITOREOS.map((n) => {
+        const puntajes = registros[docente.id]?.[n]?.puntajes || {};
+        return promedioMonitoreo(puntajes);
+      });
 
-    localStorage.setItem(`monitoreo-docente-${claveDocente}`, JSON.stringify(payload));
-    alert("Evaluación guardada en este navegador.");
+      const monitoreosUsados = MONITOREOS.filter((n) => monitoreosPromedio.includes(n));
+      const promedioGeneral =
+        monitoreosUsados.reduce((acc, n) => acc + promediosPorMonitoreo[n - 1], 0) /
+        Math.max(monitoreosUsados.length, 1);
+
+      return {
+        ...docente,
+        promediosPorMonitoreo,
+        promedioGeneral,
+        escala: obtenerEscala(promedioGeneral),
+      };
+    });
+  }, [docentes, registros, monitoreosPromedio]);
+
+  const historialDocente = useMemo(() => {
+    return MONITOREOS.map((n) => {
+      const registro = registros[docenteSeleccionado.id]?.[n] || {
+        datosVisita: getInitialDatosVisita(),
+        puntajes: {},
+      };
+      const promedio = promedioMonitoreo(registro.puntajes);
+      const escala = obtenerEscala(promedio);
+      return {
+        monitoreo: n,
+        datosVisita: registro.datosVisita,
+        puntajes: registro.puntajes,
+        promedio,
+        escala,
+      };
+    });
+  }, [docenteSeleccionado.id, registros]);
+
+  const datosGrafico = useMemo(() => {
+    const items = MONITOREOS.filter((n) => monitoreosGrafico.includes(n)).map((n) => {
+      const puntajes = registros[docenteSeleccionado.id]?.[n]?.puntajes || {};
+      return {
+        label: `M${n}`,
+        value: promedioMonitoreo(puntajes),
+      };
+    });
+
+    return {
+      labels: items.map((i) => i.label),
+      values: items.map((i) => i.value),
+    };
+  }, [docenteSeleccionado.id, monitoreosGrafico, registros]);
+
+  const toggleSeleccion = (
+    valor: number,
+    lista: number[],
+    setter: React.Dispatch<React.SetStateAction<number[]>>
+  ) => {
+    setter((prev) => {
+      if (prev.includes(valor)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((x) => x !== valor);
+      }
+      return [...prev, valor].sort((a, b) => a - b);
+    });
   };
 
-  const generarResumenDescarga = () => {
-    let texto = "";
-    resumenDocentes.forEach((d, i) => {
-      texto += `${i + 1}. ${d.nombre} - ${d.grado}\n`;
-      texto += `Promedio: ${d.promedio.toFixed(2)}\n`;
-      texto += `Desempeño: ${d.escala.letra} - ${d.escala.texto}\n\n`;
-    });
-    descargarTexto(texto, "Resumen_Docentes.txt");
+  const guardarLocal = () => {
+    localStorage.setItem("registros-monitoreo", JSON.stringify(registros));
+    alert("Registros guardados en este navegador.");
   };
 
   const generarRetroalimentacion = () => {
@@ -368,13 +637,12 @@ export default function App() {
       datosVisita.observacionesGenerales.trim() ||
       "Durante el monitoreo se evidenció el desarrollo de la sesión con disposición favorable hacia la mejora continua de la práctica pedagógica.";
 
-    const criteriosEvaluados: CriterioEvaluado[] = rubricaBase.map((r) => {
+    const criteriosEvaluados: CriterioEvaluado[] = RUBRICA_BASE.map((r) => {
       const puntaje = evaluacionActual[r.id] ?? 1;
       const nivelData = obtenerNivelPorPuntaje(puntaje);
       return {
         id: r.id,
         criterio: r.criterio,
-        descripcion: r.descripcion,
         categoria: r.categoria,
         puntaje,
         letra: nivelData.letra,
@@ -389,17 +657,17 @@ export default function App() {
     const mejoras = agruparPorCategoria(mejorasLista);
 
     const predominio =
-      escala.letra === "AD"
+      escalaActual.letra === "AD"
         ? "predominio de logros destacados"
-        : escala.letra === "A"
+        : escalaActual.letra === "A"
           ? "predominio de logros esperados"
-          : escala.letra === "B"
+          : escalaActual.letra === "B"
             ? "predominio de criterios en proceso"
             : "predominio de criterios en inicio";
 
     const sintesis =
       "El análisis de la rúbrica evidencia un desempeño general ubicado en el nivel " +
-      escala.texto.toLowerCase() +
+      escalaActual.texto.toLowerCase() +
       ", con " +
       predominio +
       ". Se observan avances en la conducción del proceso pedagógico; sin embargo, aún existen criterios que requieren fortalecimiento para consolidar una práctica más consistente, reflexiva y centrada en el logro de aprendizajes de calidad.";
@@ -411,17 +679,10 @@ export default function App() {
               "En la dimensión " +
               categoria +
               ", el docente evidencia logros en los siguientes aspectos:\n" +
-              items
-                .map(
-                  (i) =>
-                    "- " +
-                    i.criterio +
-                    ": se observan acciones pedagógicas pertinentes que favorecen la participación, la organización del aprendizaje y el desarrollo de capacidades en los estudiantes."
-                )
-                .join("\n")
+              items.map((i) => "- " + i.criterio).join("\n")
           )
           .join("\n\n")
-      : "- En esta visita aún no se evidencian criterios en nivel esperado o destacado; será importante continuar con el acompañamiento pedagógico para fortalecer progresivamente la práctica docente.";
+      : "- En esta visita aún no se evidencian criterios en nivel esperado o destacado.";
 
     const mejorasTexto = Object.keys(mejoras).length
       ? Object.entries(mejoras)
@@ -430,17 +691,10 @@ export default function App() {
               "En la dimensión " +
               categoria +
               ", se recomienda fortalecer los siguientes aspectos:\n" +
-              items
-                .map(
-                  (i) =>
-                    "- " +
-                    i.criterio +
-                    ": requiere mayor sistematicidad en la mediación pedagógica, mejor seguimiento del aprendizaje y estrategias más intencionales para lograr avances sostenidos."
-                )
-                .join("\n")
+              items.map((i) => "- " + i.criterio).join("\n")
           )
           .join("\n\n")
-      : "- No se identifican criterios prioritarios en proceso o en inicio dentro de los aspectos evaluados en esta visita.";
+      : "- No se identifican criterios prioritarios en proceso o en inicio.";
 
     const preguntasReflexivas = mejorasLista.length
       ? mejorasLista
@@ -454,25 +708,13 @@ export default function App() {
               " hacia un desempeño esperado o destacado?"
           )
           .join("\n")
-      : "- ¿Qué estrategias podrías mantener y sistematizar para seguir consolidando tus fortalezas pedagógicas?";
+      : "- ¿Qué estrategias podrías mantener y sistematizar para seguir consolidando tus fortalezas?";
 
     const compromisosTexto = mejorasLista.length
       ? mejorasLista
-          .map(
-            (m) =>
-              "- Fortalecer el criterio '" +
-              m.criterio +
-              "' mediante acciones concretas en las próximas sesiones, asegurando evidencias verificables de mejora."
-          )
+          .map((m) => "- Fortalecer el criterio '" + m.criterio + "' en las próximas sesiones.")
           .join("\n")
-      : "- Mantener y sistematizar las buenas prácticas evidenciadas en la sesión observada.";
-
-    const recomendacionesTexto =
-      "- Planificar sesiones con mayor articulación entre propósito, actividades, evidencias y criterios de evaluación.\n" +
-      "- Fortalecer el uso de metodologías activas que promuevan participación, reflexión y pensamiento crítico.\n" +
-      "- Incorporar evaluación formativa con retroalimentación específica, oportuna y orientada a la mejora.\n" +
-      "- Optimizar el uso de recursos didácticos y herramientas tecnológicas con intencionalidad pedagógica.\n" +
-      "- Generar ambientes de aprendizaje basados en el respeto, la cercanía y la autorregulación del comportamiento estudiantil.";
+      : "- Mantener y sistematizar las buenas prácticas evidenciadas.";
 
     const detalleCriterios = criteriosEvaluados
       .map(
@@ -483,43 +725,130 @@ export default function App() {
 
     const texto = `RETROALIMENTACIÓN PEDAGÓGICA
 
-1. Datos generales
+Monitoreo: ${monitoreoActivo}
 Docente: ${docente}
 Área: ${area}
 Grado: ${grado}
 Sesión: ${sesion}
 Fecha: ${fecha}
 Acompañante pedagógico: ${datosVisita.observador}
+Usuario activo: ${usuarioActivo}
 
-2. Síntesis del desempeño
+Síntesis del desempeño
 ${sintesis}
 
-3. Fortalezas pedagógicas
+Fortalezas pedagógicas
 ${fortalezasTexto}
 
-4. Aspectos por mejorar
+Aspectos por mejorar
 ${mejorasTexto}
 
-5. Retroalimentación reflexiva
+Preguntas reflexivas
 ${preguntasReflexivas}
 
-6. Compromisos de mejora
+Compromisos de mejora
 ${compromisosTexto}
 
-7. Recomendaciones pedagógicas
-${recomendacionesTexto}
-
-8. Conclusión
-Se reconoce el compromiso profesional del docente y su disposición para continuar fortaleciendo su práctica pedagógica.
-
-9. Detalle de resultados por criterio
+Detalle de resultados por criterio
 ${detalleCriterios}
 
 Observaciones generales
 ${observaciones}`;
 
     setRetroalimentacionGenerada(texto);
-    descargarTexto(texto, `Retroalimentacion_Docente_${docente.replace(/\s+/g, "_")}.txt`);
+    descargarTexto(
+      texto,
+      `Retroalimentacion_${docente.replace(/\s+/g, "_")}_M${monitoreoActivo}.txt`
+    );
+  };
+
+  const exportarExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    const resumenRows: (string | number)[][] = [
+      [
+        "Docente",
+        "Grado",
+        "Promedio M1",
+        "Promedio M2",
+        "Promedio M3",
+        "Promedio M4",
+        "Promedio M5",
+        "Monitoreos promediados",
+        "Promedio general",
+        "Desempeño final",
+      ],
+    ];
+
+    resumenDocentes.forEach((docente) => {
+      resumenRows.push([
+        docente.nombre,
+        docente.grado,
+        Number(docente.promediosPorMonitoreo[0].toFixed(2)),
+        Number(docente.promediosPorMonitoreo[1].toFixed(2)),
+        Number(docente.promediosPorMonitoreo[2].toFixed(2)),
+        Number(docente.promediosPorMonitoreo[3].toFixed(2)),
+        Number(docente.promediosPorMonitoreo[4].toFixed(2)),
+        monitoreosPromedio.join(", "),
+        Number(docente.promedioGeneral.toFixed(2)),
+        `${docente.escala.letra} - ${docente.escala.texto}`,
+      ]);
+    });
+
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenRows);
+    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen General");
+
+    docentes.forEach((docente) => {
+      const rows: (string | number)[][] = [
+        ["Docente", docente.nombre],
+        ["Grado", docente.grado],
+        ["Monitoreos promediados", monitoreosPromedio.join(", ")],
+        [],
+      ];
+
+      MONITOREOS.forEach((n) => {
+        const registro = registros[docente.id]?.[n] || {
+          datosVisita: getInitialDatosVisita(),
+          puntajes: {},
+        };
+        const promedio = promedioMonitoreo(registro.puntajes);
+        const escala = obtenerEscala(promedio);
+
+        rows.push([`Monitoreo ${n}`]);
+        rows.push(["Fecha", registro.datosVisita.fecha || "-"]);
+        rows.push(["Hora", registro.datosVisita.hora || "-"]);
+        rows.push(["Área", registro.datosVisita.area || "-"]);
+        rows.push(["Sesión", registro.datosVisita.sesion || "-"]);
+        rows.push(["Observador", registro.datosVisita.observador || "-"]);
+        rows.push(["Observaciones", registro.datosVisita.observacionesGenerales || "-"]);
+        rows.push(["Promedio", Number(promedio.toFixed(2))]);
+        rows.push(["Desempeño", `${escala.letra} - ${escala.texto}`]);
+        rows.push([]);
+        rows.push(["Criterio", "Categoría", "Puntaje", "Nivel"]);
+        RUBRICA_BASE.forEach((r) => {
+          const puntaje = registro.puntajes[r.id] ?? 1;
+          const nivel = obtenerNivelPorPuntaje(puntaje);
+          rows.push([r.criterio, r.categoria, puntaje, `${nivel.letra} - ${nivel.nivel}`]);
+        });
+        rows.push([]);
+      });
+
+      const promediosSeleccionados = monitoreosPromedio.map((n) =>
+        promedioMonitoreo(registros[docente.id]?.[n]?.puntajes || {})
+      );
+      const promedioFinal =
+        promediosSeleccionados.reduce((a, b) => a + b, 0) /
+        Math.max(promediosSeleccionados.length, 1);
+      const escalaFinal = obtenerEscala(promedioFinal);
+
+      rows.push(["Promedio final configurable", Number(promedioFinal.toFixed(2))]);
+      rows.push(["Desempeño final configurable", `${escalaFinal.letra} - ${escalaFinal.texto}`]);
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, limpiarNombreHoja(docente.nombre));
+    });
+
+    XLSX.writeFile(wb, "Monitoreo_Docente_CATA.xlsx");
   };
 
   if (!autenticado) {
@@ -547,39 +876,28 @@ ${observaciones}`;
             boxShadow: "0 2px 8px rgba(15, 23, 42, 0.06)",
           }}
         >
-          <h1 style={{ marginTop: 0, marginBottom: 8, fontSize: 26 }}>
-            Acceso al sistema
-          </h1>
-
+          <h1 style={{ marginTop: 0, marginBottom: 8, fontSize: 26 }}>Acceso al sistema</h1>
           <p style={{ marginTop: 0, color: "#64748b", marginBottom: 20 }}>
             Ingrese su usuario y contraseña para continuar.
           </p>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-              Usuario
-            </label>
+            <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Usuario</label>
             <input
               type="text"
               value={credenciales.usuario}
-              onChange={(e) =>
-                setCredenciales({ ...credenciales, usuario: e.target.value })
-              }
+              onChange={(e) => setCredenciales({ ...credenciales, usuario: e.target.value })}
               placeholder="Ingrese su usuario"
               style={inputStyle()}
             />
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-              Contraseña
-            </label>
+            <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Contraseña</label>
             <input
               type="password"
               value={credenciales.clave}
-              onChange={(e) =>
-                setCredenciales({ ...credenciales, clave: e.target.value })
-              }
+              onChange={(e) => setCredenciales({ ...credenciales, clave: e.target.value })}
               placeholder="Ingrese su contraseña"
               style={inputStyle()}
             />
@@ -621,7 +939,7 @@ ${observaciones}`;
         color: "#0f172a",
       }}
     >
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1300, margin: "0 auto" }}>
         <div style={{ marginBottom: 24, textAlign: "center" }}>
           <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
             Sistema de Monitoreo Docente
@@ -630,28 +948,16 @@ ${observaciones}`;
             Colegio Adventista Túpac Amaru - Sede Jerusalén
           </p>
           <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
-            Por ADEMER HUAHUACONDORI ARANDA - Diseñador de Aprendizajes
+            Usuario activo: {usuarioActivo}
           </p>
-
           <div style={{ marginTop: 12 }}>
-            <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: 13 }}>
-              Usuario activo: {usuarioActivo}
-            </p>
             <button onClick={cerrarSesion} style={buttonStyle("outline")}>
               Cerrar sesión
             </button>
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            justifyContent: "center",
-            marginBottom: 24,
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 18 }}>
           <button
             onClick={() => setVistaActiva("evaluacion")}
             style={buttonStyle(vistaActiva === "evaluacion" ? "solid" : "outline")}
@@ -662,172 +968,209 @@ ${observaciones}`;
             onClick={() => setVistaActiva("resumen")}
             style={buttonStyle(vistaActiva === "resumen" ? "solid" : "outline")}
           >
-            Desempeño de docentes
+            Resumen general
           </button>
+          <button
+            onClick={() => setVistaActiva("grafico")}
+            style={buttonStyle(vistaActiva === "grafico" ? "solid" : "outline")}
+          >
+            Gráfico de desempeño
+          </button>
+          <button
+            onClick={() => setVistaActiva("historial")}
+            style={buttonStyle(vistaActiva === "historial" ? "solid" : "outline")}
+          >
+            Historial por docente
+          </button>
+          <button onClick={exportarExcel} style={buttonStyle("solid")}>
+            Exportar a Excel
+          </button>
+        </div>
+
+        <div style={{ ...cardStyle(), padding: 20, marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontWeight: 700 }}>Monitoreos que se promedian:</span>
+            {MONITOREOS.map((n) => (
+              <button
+                key={n}
+                onClick={() => toggleSeleccion(n, monitoreosPromedio, setMonitoreosPromedio)}
+                style={buttonStyle(monitoreosPromedio.includes(n) ? "solid" : "outline")}
+              >
+                M{n}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div
           style={{
             display: "grid",
             gap: 16,
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)",
-            marginBottom: 24,
+            gridTemplateColumns: "320px minmax(0, 1fr)",
+            alignItems: "start",
           }}
         >
-          <div style={{ ...cardStyle(), padding: 24 }}>
-            <h2 style={sectionTitleStyle()}>Panel general</h2>
-            <p style={{ marginTop: 10, color: "#64748b" }}>
-              Gestión de monitoreo, evaluación y retroalimentación pedagógica.
-            </p>
-          </div>
+          <div style={{ ...cardStyle(), padding: 20 }}>
+            <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 16 }}>
+              Lista de docentes
+            </h3>
 
-          <div style={{ ...cardStyle(), padding: 24 }}>
-            <div style={{ fontSize: 14, color: "#64748b", marginBottom: 10 }}>
-              Desempeño actual
-            </div>
-            <div
-              style={{
-                ...badgeStyle(estado.clase),
-                borderRadius: 18,
-                padding: 18,
-                textAlign: "center",
-                display: "inline-block",
-                minWidth: 180,
-              }}
-            >
-              <div style={{ fontSize: 36, fontWeight: 800 }}>{escala.letra}</div>
-              <div style={{ marginTop: 6 }}>{escala.texto}</div>
-            </div>
-            <div style={{ marginTop: 12, color: "#64748b" }}>
-              Promedio: {promedio.toFixed(2)}
-            </div>
-          </div>
-        </div>
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar docente..."
+              style={inputStyle()}
+            />
 
-        {vistaActiva === "evaluacion" ? (
-          <div style={{ display: "grid", gap: 24, gridTemplateColumns: "320px minmax(0, 1fr)" }}>
-            <div style={{ ...cardStyle(), padding: 20 }}>
-              <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 16 }}>
-                Lista de profesores
-              </h3>
-
-              <input
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar docente..."
-                style={inputStyle()}
-              />
-
-              <div style={{ marginTop: 16, maxHeight: 560, overflowY: "auto", paddingRight: 6 }}>
-                {docentesFiltrados.map((docente) => {
-                  const activo = docenteSeleccionado.id === docente.id;
-                  return (
-                    <button
-                      key={docente.id}
-                      onClick={() => setDocenteSeleccionado(docente)}
+            <div style={{ marginTop: 16, maxHeight: 620, overflowY: "auto", paddingRight: 6 }}>
+              {docentesFiltrados.map((docente) => {
+                const activo = docenteSeleccionado.id === docente.id;
+                return (
+                  <button
+                    key={docente.id}
+                    onClick={() => setDocenteSeleccionado(docente)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      borderRadius: 16,
+                      padding: 14,
+                      border: activo ? "1px solid #111827" : "1px solid #e2e8f0",
+                      background: activo ? "#111827" : "#fff",
+                      color: activo ? "#fff" : "#111827",
+                      marginBottom: 10,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{docente.nombre}</div>
+                    <div
                       style={{
-                        width: "100%",
-                        textAlign: "left",
-                        borderRadius: 16,
-                        padding: 14,
-                        border: activo ? "1px solid #111827" : "1px solid #e2e8f0",
-                        background: activo ? "#111827" : "#fff",
-                        color: activo ? "#fff" : "#111827",
-                        marginBottom: 10,
-                        cursor: "pointer",
+                        marginTop: 4,
+                        fontSize: 13,
+                        color: activo ? "#cbd5e1" : "#64748b",
                       }}
                     >
-                      <div style={{ fontWeight: 700 }}>{docente.nombre}</div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 13,
-                          color: activo ? "#cbd5e1" : "#64748b",
-                        }}
-                      >
-                        {docente.grado}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      {docente.grado}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            <div style={{ ...cardStyle(), padding: 20 }}>
-              <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 8 }}>
-                Rúbrica de evaluación docente
-              </h3>
-              <p style={{ color: "#475569", marginBottom: 20 }}>
-                Docente seleccionado: <strong>{docenteSeleccionado.nombre}</strong> |{" "}
-                {docenteSeleccionado.grado}
-              </p>
+          <div>
+            {vistaActiva === "evaluacion" && (
+              <div style={{ ...cardStyle(), padding: 20 }}>
+                <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 8 }}>
+                  Evaluación docente
+                </h3>
 
-              <div
-                style={{
-                  display: "grid",
-                  gap: 16,
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  marginBottom: 24,
-                }}
-              >
-                <div>
-                  <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Fecha</label>
-                  <input
-                    type="date"
-                    value={datosVisita.fecha}
-                    onChange={(e) => setDatosVisita({ ...datosVisita, fecha: e.target.value })}
-                    style={inputStyle()}
-                  />
-                </div>
+                <p style={{ color: "#475569", marginBottom: 16 }}>
+                  Docente seleccionado: <strong>{docenteSeleccionado.nombre}</strong> |{" "}
+                  {docenteSeleccionado.grado}
+                </p>
 
-                <div>
-                  <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Hora</label>
-                  <input
-                    type="time"
-                    value={datosVisita.hora}
-                    onChange={(e) => setDatosVisita({ ...datosVisita, hora: e.target.value })}
-                    style={inputStyle()}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Área</label>
-                  <input
-                    value={datosVisita.area}
-                    onChange={(e) => setDatosVisita({ ...datosVisita, area: e.target.value })}
-                    placeholder="Ej. Comunicación"
-                    style={inputStyle()}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-                    Nombre de la sesión
+                <div style={{ marginBottom: 18 }}>
+                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>
+                    Seleccione monitoreo
                   </label>
-                  <input
-                    value={datosVisita.sesion}
-                    onChange={(e) => setDatosVisita({ ...datosVisita, sesion: e.target.value })}
-                    placeholder="Ej. Comprensión lectora"
-                    style={inputStyle()}
-                  />
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {MONITOREOS.map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setMonitoreoActivo(n)}
+                        style={buttonStyle(monitoreoActivo === n ? "solid" : "outline")}
+                      >
+                        Monitoreo {n}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-                    Observador
-                  </label>
-                  <input
-                    value={datosVisita.observador}
-                    onChange={(e) => setDatosVisita({ ...datosVisita, observador: e.target.value })}
-                    style={inputStyle()}
-                  />
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 16,
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    marginBottom: 24,
+                  }}
+                >
+                  <div>
+                    <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Fecha</label>
+                    <input
+                      type="date"
+                      value={datosVisita.fecha}
+                      onChange={(e) => actualizarDatosVisita("fecha", e.target.value)}
+                      style={inputStyle()}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Hora</label>
+                    <input
+                      type="time"
+                      value={datosVisita.hora}
+                      onChange={(e) => actualizarDatosVisita("hora", e.target.value)}
+                      style={inputStyle()}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Área</label>
+                    <input
+                      value={datosVisita.area}
+                      onChange={(e) => actualizarDatosVisita("area", e.target.value)}
+                      placeholder="Ej. Comunicación"
+                      style={inputStyle()}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
+                      Nombre de la sesión
+                    </label>
+                    <input
+                      value={datosVisita.sesion}
+                      onChange={(e) => actualizarDatosVisita("sesion", e.target.value)}
+                      placeholder="Ej. Comprensión lectora"
+                      style={inputStyle()}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
+                      Observador
+                    </label>
+                    <input
+                      value={datosVisita.observador}
+                      onChange={(e) => actualizarDatosVisita("observador", e.target.value)}
+                      style={inputStyle()}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ height: 1, background: "#e2e8f0", margin: "20px 0" }} />
+                <div style={{ ...cardStyle(), padding: 18, marginBottom: 20 }}>
+                  <div style={{ fontSize: 14, color: "#64748b", marginBottom: 10 }}>
+                    Desempeño del monitoreo actual
+                  </div>
+                  <div
+                    style={{
+                      ...badgeStyle(estadoActual.clase),
+                      borderRadius: 18,
+                      padding: 18,
+                      textAlign: "center",
+                      display: "inline-block",
+                      minWidth: 180,
+                    }}
+                  >
+                    <div style={{ fontSize: 36, fontWeight: 800 }}>{escalaActual.letra}</div>
+                    <div style={{ marginTop: 6 }}>{escalaActual.texto}</div>
+                  </div>
+                  <div style={{ marginTop: 12, color: "#64748b" }}>
+                    Promedio: {promedioActual.toFixed(2)}
+                  </div>
+                </div>
 
-              <div>
-                {rubricaBase.map((item, index) => (
+                {RUBRICA_BASE.map((item, index) => (
                   <div
                     key={item.id}
                     style={{
@@ -852,7 +1195,6 @@ ${observaciones}`;
                           Criterio {index + 1}
                         </div>
                         <div style={{ fontSize: 18, fontWeight: 700 }}>{item.criterio}</div>
-                        <p style={{ marginTop: 6, color: "#475569" }}>{item.descripcion}</p>
                         <span
                           style={{
                             ...badgeStyle("outline"),
@@ -868,20 +1210,58 @@ ${observaciones}`;
                         </span>
                       </div>
 
-                      <span
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() =>
+                            setCriterioAbierto(criterioAbierto === item.id ? null : item.id)
+                          }
+                          style={buttonStyle("outline")}
+                        >
+                          {criterioAbierto === item.id ? "Ocultar descripción" : "Ver descripción"}
+                        </button>
+                        <span
+                          style={{
+                            ...badgeStyle(),
+                            display: "inline-block",
+                            borderRadius: 999,
+                            padding: "8px 12px",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            height: "fit-content",
+                          }}
+                        >
+                          Puntaje: {evaluacionActual[item.id] ?? 1}
+                        </span>
+                      </div>
+                    </div>
+
+                    {criterioAbierto === item.id && (
+                      <div
                         style={{
-                          ...badgeStyle(),
-                          display: "inline-block",
-                          borderRadius: 999,
-                          padding: "8px 12px",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          height: "fit-content",
+                          background: "#f8fafc",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 14,
+                          padding: 14,
+                          marginBottom: 14,
                         }}
                       >
-                        Puntaje: {evaluacionActual[item.id] ?? 1}
-                      </span>
-                    </div>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>Aspectos</div>
+                        <ul style={{ marginTop: 0 }}>
+                          {item.aspectos.map((aspecto) => (
+                            <li key={aspecto} style={{ marginBottom: 4 }}>
+                              {aspecto}
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                          <div><strong>Nivel IV:</strong> {item.niveles.IV}</div>
+                          <div><strong>Nivel III:</strong> {item.niveles.III}</div>
+                          <div><strong>Nivel II:</strong> {item.niveles.II}</div>
+                          <div><strong>Nivel I:</strong> {item.niveles.I}</div>
+                        </div>
+                      </div>
+                    )}
 
                     <div
                       style={{
@@ -891,7 +1271,7 @@ ${observaciones}`;
                       }}
                     >
                       {niveles.map((nivel) => {
-                        const activo = evaluacionActual[item.id] === nivel.valor;
+                        const activo = (evaluacionActual[item.id] ?? 1) === nivel.valor;
                         return (
                           <button
                             key={nivel.valor}
@@ -922,132 +1302,205 @@ ${observaciones}`;
                     </div>
                   </div>
                 ))}
+
+                <div style={{ marginTop: 20, marginBottom: 20 }}>
+                  <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
+                    Observaciones generales
+                  </label>
+                  <textarea
+                    value={datosVisita.observacionesGenerales}
+                    onChange={(e) =>
+                      actualizarDatosVisita("observacionesGenerales", e.target.value)
+                    }
+                    placeholder="Detalle aquí las observaciones generales del monitoreo..."
+                    style={textareaStyle(120)}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+                  <button onClick={generarRetroalimentacion} style={buttonStyle("solid")}>
+                    Generar retroalimentación
+                  </button>
+                  <button onClick={guardarLocal} style={buttonStyle("solid")}>
+                    Guardar registros
+                  </button>
+                  <button onClick={reiniciarMonitoreoActual} style={buttonStyle("outline")}>
+                    Reiniciar monitoreo actual
+                  </button>
+                  <button
+                    onClick={() =>
+                      descargarTexto(
+                        retroalimentacionGenerada,
+                        `Retroalimentacion_M${monitoreoActivo}.txt`
+                      )
+                    }
+                    style={buttonStyle("outline")}
+                  >
+                    Descargar retroalimentación
+                  </button>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
+                    Retroalimentación generada
+                  </label>
+                  <textarea
+                    value={retroalimentacionGenerada}
+                    onChange={(e) => setRetroalimentacionGenerada(e.target.value)}
+                    placeholder="Aquí aparecerá la retroalimentación generada..."
+                    style={textareaStyle(260)}
+                  />
+                </div>
               </div>
+            )}
 
-              <div style={{ height: 1, background: "#e2e8f0", margin: "20px 0" }} />
+            {vistaActiva === "resumen" && (
+              <div style={{ ...cardStyle(), padding: 20 }}>
+                <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 8 }}>
+                  Resumen general
+                </h3>
+                <p style={{ color: "#475569", marginBottom: 16 }}>
+                  El promedio general y el desempeño final se calculan con los monitoreos seleccionados.
+                </p>
 
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-                  Observaciones generales
-                </label>
-                <textarea
-                  value={datosVisita.observacionesGenerales}
-                  onChange={(e) =>
-                    setDatosVisita({ ...datosVisita, observacionesGenerales: e.target.value })
-                  }
-                  placeholder="Detalle aquí las observaciones generales del monitoreo..."
-                  style={textareaStyle(120)}
-                />
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", textAlign: "left" }}>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Docente</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Grado</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M1</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M2</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M3</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M4</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>M5</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Promedio general</th>
+                        <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Desempeño final</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resumenDocentes.map((docente) => (
+                        <tr key={docente.id}>
+                          <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", fontWeight: 600 }}>
+                            {docente.nombre}
+                          </td>
+                          <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                            {docente.grado}
+                          </td>
+                          {docente.promediosPorMonitoreo.map((valor, index) => (
+                            <td key={index} style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                              {valor.toFixed(2)}
+                            </td>
+                          ))}
+                          <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                            {docente.promedioGeneral.toFixed(2)}
+                          </td>
+                          <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                            <span
+                              style={{
+                                ...badgeStyle(),
+                                display: "inline-block",
+                                borderRadius: 999,
+                                padding: "6px 10px",
+                                fontSize: 12,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {docente.escala.letra} - {docente.escala.texto}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+            )}
 
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
-                <button
-                  onClick={() => descargarTexto(retroalimentacionGenerada, "Retroalimentacion.txt")}
-                  style={buttonStyle("outline")}
-                >
-                  Descargar retroalimentación
-                </button>
-                <button
-                  onClick={generarRetroalimentacion}
-                  style={{
-                    ...buttonStyle("solid"),
-                    background: "#7c3aed",
-                    borderColor: "#7c3aed",
-                  }}
-                >
-                  Generar retroalimentación
-                </button>
-                <button onClick={guardarLocal} style={buttonStyle("solid")}>
-                  Guardar evaluación
-                </button>
-                <button onClick={reiniciarRubrica} style={buttonStyle("outline")}>
-                  Reiniciar
-                </button>
+            {vistaActiva === "grafico" && (
+              <div style={{ ...cardStyle(), padding: 20 }}>
+                <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 8 }}>
+                  Gráfico de desempeño
+                </h3>
+                <p style={{ color: "#475569", marginBottom: 16 }}>
+                  Docente: <strong>{docenteSeleccionado.nombre}</strong>
+                </p>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+                  {MONITOREOS.map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => toggleSeleccion(n, monitoreosGrafico, setMonitoreosGrafico)}
+                      style={buttonStyle(monitoreosGrafico.includes(n) ? "solid" : "outline")}
+                    >
+                      Mostrar M{n}
+                    </button>
+                  ))}
+                </div>
+
+                <MiniChart labels={datosGrafico.labels} values={datosGrafico.values} />
               </div>
+            )}
 
-              <div>
-                <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-                  Retroalimentación generada
-                </label>
-                <textarea
-                  value={retroalimentacionGenerada}
-                  onChange={(e) => setRetroalimentacionGenerada(e.target.value)}
-                  placeholder="Aquí aparecerá la retroalimentación generada..."
-                  style={textareaStyle(260)}
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div style={{ ...cardStyle(), padding: 20 }}>
-            <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 8 }}>
-              Lista de docentes con desempeño
-            </h3>
-            <p style={{ color: "#475569", marginBottom: 16 }}>
-              Visualiza el nivel de desempeño alcanzado por cada docente según las evaluaciones registradas.
-            </p>
+            {vistaActiva === "historial" && (
+              <div style={{ ...cardStyle(), padding: 20 }}>
+                <h3 style={{ ...sectionTitleStyle(), fontSize: 18, marginBottom: 8 }}>
+                  Historial por docente
+                </h3>
+                <p style={{ color: "#475569", marginBottom: 16 }}>
+                  Docente: <strong>{docenteSeleccionado.nombre}</strong>
+                </p>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-              <button onClick={generarResumenDescarga} style={buttonStyle("solid")}>
-                Descargar resumen
-              </button>
-            </div>
+                {historialDocente.map((item) => (
+                  <div
+                    key={item.monitoreo}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 14,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700 }}>Monitoreo {item.monitoreo}</div>
+                        <div style={{ marginTop: 6, color: "#64748b" }}>
+                          Fecha: {item.datosVisita.fecha || "-"} | Hora: {item.datosVisita.hora || "-"}
+                        </div>
+                        <div style={{ marginTop: 4, color: "#64748b" }}>
+                          Área: {item.datosVisita.area || "-"} | Sesión: {item.datosVisita.sesion || "-"}
+                        </div>
+                      </div>
 
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-                <thead>
-                  <tr style={{ background: "#f8fafc", textAlign: "left" }}>
-                    <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Docente</th>
-                    <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Grado</th>
-                    <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
-                      Criterios evaluados
-                    </th>
-                    <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Promedio</th>
-                    <th style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>Desempeño</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumenDocentes.map((docente) => (
-                    <tr key={docente.id}>
-                      <td
-                        style={{
-                          padding: 12,
-                          borderBottom: "1px solid #e2e8f0",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {docente.nombre}
-                      </td>
-                      <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
-                        {docente.grado}
-                      </td>
-                      <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
-                        {docente.criteriosEvaluados}
-                      </td>
-                      <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
-                        {docente.promedio.toFixed(2)}
-                      </td>
-                      <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                      <div>
                         <span
                           style={{
                             ...badgeStyle(),
                             display: "inline-block",
                             borderRadius: 999,
-                            padding: "6px 10px",
+                            padding: "8px 12px",
                             fontSize: 12,
                             fontWeight: 700,
                           }}
                         >
-                          {docente.escala.letra} - {docente.escala.texto}
+                          {item.escala.letra} - {item.escala.texto}
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        <div style={{ marginTop: 8, color: "#64748b" }}>
+                          Promedio: {item.promedio.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <strong>Observaciones:</strong>{" "}
+                      {item.datosVisita.observacionesGenerales || "-"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
