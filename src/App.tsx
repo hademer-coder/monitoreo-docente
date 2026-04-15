@@ -365,6 +365,44 @@ function badgeStyle(kind: string = "default"): CSSProperties {
   return { background: "#f1f5f9", color: "#334155" };
 }
 
+function colorNivel(letra: string, activo = false): CSSProperties {
+  const colores = {
+    AD: {
+      fondo: activo ? "#dcfce7" : "#f0fdf4",
+      borde: "#22c55e",
+      texto: "#166534",
+    },
+    A: {
+      fondo: activo ? "#dbeafe" : "#eff6ff",
+      borde: "#3b82f6",
+      texto: "#1d4ed8",
+    },
+    B: {
+      fondo: activo ? "#fef3c7" : "#fffbeb",
+      borde: "#f59e0b",
+      texto: "#92400e",
+    },
+    C: {
+      fondo: activo ? "#fee2e2" : "#fef2f2",
+      borde: "#ef4444",
+      texto: "#991b1b",
+    },
+  };
+
+  const c = colores[letra as keyof typeof colores] || colores.C;
+
+  return {
+    borderRadius: 14,
+    padding: 12,
+    textAlign: "left",
+    border: `2px solid ${c.borde}`,
+    background: c.fondo,
+    color: c.texto,
+    cursor: "pointer",
+    fontWeight: 600,
+  };
+}
+
 function MiniChart({
   labels,
   values,
@@ -1248,19 +1286,6 @@ ${observaciones}`;
                         >
                           {criterioAbierto === item.id ? "Ocultar descripción" : "Ver descripción"}
                         </button>
-                        <span
-                          style={{
-                            ...badgeStyle(),
-                            display: "inline-block",
-                            borderRadius: 999,
-                            padding: "8px 12px",
-                            fontSize: 12,
-                            fontWeight: 700,
-                            height: "fit-content",
-                          }}
-                        >
-                          Puntaje: {evaluacionActual[item.id] ?? 1}
-                        </span>
                       </div>
                     </div>
 
@@ -1305,26 +1330,11 @@ ${observaciones}`;
                           <button
                             key={nivel.valor}
                             onClick={() => actualizarPuntaje(item.id, nivel.valor)}
-                            style={{
-                              borderRadius: 14,
-                              padding: 12,
-                              textAlign: "left",
-                              border: activo ? "1px solid #111827" : "1px solid #e2e8f0",
-                              background: activo ? "#111827" : "#fff",
-                              color: activo ? "#fff" : "#111827",
-                              cursor: "pointer",
-                            }}
+                            style={colorNivel(nivel.letra, activo)}
                           >
-                            <div style={{ fontWeight: 700 }}>{nivel.letra}</div>
-                            <div style={{ marginTop: 4, fontSize: 13 }}>{nivel.etiqueta}</div>
-                            <div
-                              style={{
-                                marginTop: 6,
-                                fontSize: 12,
-                                color: activo ? "#cbd5e1" : "#64748b",
-                              }}
-                            >
-                              Valor: {nivel.valor}
+                            <div style={{ fontWeight: 700, fontSize: 18 }}>{nivel.letra}</div>
+                            <div style={{ marginTop: 6, fontSize: 13, color: "inherit" }}>
+                              {nivel.etiqueta}
                             </div>
                           </button>
                         );
