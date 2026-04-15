@@ -27,6 +27,16 @@ type CriterioEvaluado = {
 
 type VistaActiva = "evaluacion" | "resumen";
 
+type Credenciales = {
+  usuario: string;
+  clave: string;
+};
+
+const USUARIOS = [
+  { usuario: "ademer", clave: "CATA2026" },
+  { usuario: "yessica", clave: "CATA2026" },
+];
+
 const docentesBase: Docente[] = [
   { id: 1, nombre: "QUICANO CONDORI KATY PAOLA", grado: "Inicial" },
   { id: 2, nombre: "SANCA COA ALVITH NINOSKA", grado: "1.º Primaria" },
@@ -219,6 +229,17 @@ function badgeStyle(kind: string = "default"): React.CSSProperties {
 }
 
 export default function App() {
+  const [autenticado, setAutenticado] = useState(
+    localStorage.getItem("auth-monitoreo") === "ok"
+  );
+
+  const [credenciales, setCredenciales] = useState<Credenciales>({
+    usuario: "",
+    clave: "",
+  });
+
+  const [errorLogin, setErrorLogin] = useState("");
+
   const [busqueda, setBusqueda] = useState("");
   const [docentes] = useState<Docente[]>(docentesBase);
   const [docenteSeleccionado, setDocenteSeleccionado] = useState<Docente>(docentesBase[0]);
@@ -234,10 +255,34 @@ export default function App() {
   const [retroalimentacionGenerada, setRetroalimentacionGenerada] = useState("");
   const [vistaActiva, setVistaActiva] = useState<VistaActiva>("evaluacion");
 
+  const usuarioActivo = localStorage.getItem("usuario-activo") || "";
+
+  const iniciarSesion = () => {
+    const usuarioValido = USUARIOS.find(
+      (u) => u.usuario === credenciales.usuario && u.clave === credenciales.clave
+    );
+
+    if (usuarioValido) {
+      localStorage.setItem("auth-monitoreo", "ok");
+      localStorage.setItem("usuario-activo", usuarioValido.usuario);
+      setAutenticado(true);
+      setErrorLogin("");
+    } else {
+      setErrorLogin("Usuario o contraseña incorrectos.");
+    }
+  };
+
+  const cerrarSesion = () => {
+    localStorage.removeItem("auth-monitoreo");
+    localStorage.removeItem("usuario-activo");
+    setAutenticado(false);
+    setCredenciales({ usuario: "", clave: "" });
+  };
+
   const docentesFiltrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim();
     return docentes.filter(
-      (d) => d.nombre.toLowerCase().includes(q) || d.grado.toLowerCase().includes(q),
+      (d) => d.nombre.toLowerCase().includes(q) || d.grado.toLowerCase().includes(q)
     );
   }, [busqueda, docentes]);
 
@@ -245,31 +290,23 @@ export default function App() {
   const evaluacionActual = evaluaciones[claveDocente] || {};
 
   const promedio = useMemo(() => {
-  const valores = rubricaBase.map((r) => {
-    return evaluacionActual[r.id] ?? 1; // 👈 si no está marcado = 1 (C)
-  });
-
-  return valores.reduce((a, b) => a + b, 0) / valores.length;
-}, [evaluacionActual]);
+    const valores = rubricaBase.map((r) => evaluacionActual[r.id] ?? 1);
+    return valores.reduce((a, b) => a + b, 0) / valores.length;
+  }, [evaluacionActual]);
 
   const estado = obtenerEstado(promedio);
   const escala = obtenerEscala(promedio);
 
   const resumenDocentes = docentes.map((docente) => {
     const puntajesDocente = evaluaciones[docente.id] || {};
-    const valores = rubricaBase
-      .map((r) => puntajesDocente[r.id])
-      .filter((v): v is number => typeof v === "number");
-
-    const promedioDocente = valores.length
-      ? valores.reduce((a, b) => a + b, 0) / valores.length
-      : 0;
+    const valores = rubricaBase.map((r) => puntajesDocente[r.id] ?? 1);
+    const promedioDocente = valores.reduce((a, b) => a + b, 0) / valores.length;
 
     return {
       ...docente,
       promedio: promedioDocente,
       escala: obtenerEscala(promedioDocente),
-      criteriosEvaluados: valores.length,
+      criteriosEvaluados: rubricaBase.length,
     };
   });
 
@@ -303,6 +340,7 @@ export default function App() {
       promedio,
       escala,
       retroalimentacionGenerada,
+      usuarioActivo,
       fechaGuardado: new Date().toLocaleString(),
     };
 
@@ -314,7 +352,7 @@ export default function App() {
     let texto = "";
     resumenDocentes.forEach((d, i) => {
       texto += `${i + 1}. ${d.nombre} - ${d.grado}\n`;
-      texto += `Promedio: ${d.promedio ? d.promedio.toFixed(2) : "0.00"}\n`;
+      texto += `Promedio: ${d.promedio.toFixed(2)}\n`;
       texto += `Desempeño: ${d.escala.letra} - ${d.escala.texto}\n\n`;
     });
     descargarTexto(texto, "Resumen_Docentes.txt");
@@ -331,7 +369,7 @@ export default function App() {
       "Durante el monitoreo se evidenció el desarrollo de la sesión con disposición favorable hacia la mejora continua de la práctica pedagógica.";
 
     const criteriosEvaluados: CriterioEvaluado[] = rubricaBase.map((r) => {
-      const puntaje = evaluacionActual[r.id] || 0;
+      const puntaje = evaluacionActual[r.id] ?? 1;
       const nivelData = obtenerNivelPorPuntaje(puntaje);
       return {
         id: r.id,
@@ -345,8 +383,7 @@ export default function App() {
     });
 
     const fortalezasLista = criteriosEvaluados.filter((c) => c.puntaje >= 3);
-    const mejorasLista = criteriosEvaluados.filter((c) => c.puntaje > 0 && c.puntaje < 3);
-    const sinMarcar = criteriosEvaluados.filter((c) => c.puntaje === 0);
+    const mejorasLista = criteriosEvaluados.filter((c) => c.puntaje < 3);
 
     const fortalezas = agruparPorCategoria(fortalezasLista);
     const mejoras = agruparPorCategoria(mejorasLista);
@@ -379,9 +416,9 @@ export default function App() {
                   (i) =>
                     "- " +
                     i.criterio +
-                    ": se observan acciones pedagógicas pertinentes que favorecen la participación, la organización del aprendizaje y el desarrollo de capacidades en los estudiantes.",
+                    ": se observan acciones pedagógicas pertinentes que favorecen la participación, la organización del aprendizaje y el desarrollo de capacidades en los estudiantes."
                 )
-                .join("\n"),
+                .join("\n")
           )
           .join("\n\n")
       : "- En esta visita aún no se evidencian criterios en nivel esperado o destacado; será importante continuar con el acompañamiento pedagógico para fortalecer progresivamente la práctica docente.";
@@ -398,9 +435,9 @@ export default function App() {
                   (i) =>
                     "- " +
                     i.criterio +
-                    ": requiere mayor sistematicidad en la mediación pedagógica, mejor seguimiento del aprendizaje y estrategias más intencionales para lograr avances sostenidos.",
+                    ": requiere mayor sistematicidad en la mediación pedagógica, mejor seguimiento del aprendizaje y estrategias más intencionales para lograr avances sostenidos."
                 )
-                .join("\n"),
+                .join("\n")
           )
           .join("\n\n")
       : "- No se identifican criterios prioritarios en proceso o en inicio dentro de los aspectos evaluados en esta visita.";
@@ -414,10 +451,10 @@ export default function App() {
               m.criterio +
               "' para avanzar desde el nivel " +
               m.nivel.toLowerCase() +
-              " hacia un desempeño esperado o destacado?",
+              " hacia un desempeño esperado o destacado?"
           )
           .join("\n")
-      : "- ¿Qué estrategias podrías mantener y sistematizar para seguir consolidando tus fortalezas pedagógicas?\n- ¿Cómo podrías compartir tus buenas prácticas con otros docentes de la institución?";
+      : "- ¿Qué estrategias podrías mantener y sistematizar para seguir consolidando tus fortalezas pedagógicas?";
 
     const compromisosTexto = mejorasLista.length
       ? mejorasLista
@@ -425,10 +462,10 @@ export default function App() {
             (m) =>
               "- Fortalecer el criterio '" +
               m.criterio +
-              "' mediante acciones concretas en las próximas sesiones, asegurando evidencias verificables de mejora.",
+              "' mediante acciones concretas en las próximas sesiones, asegurando evidencias verificables de mejora."
           )
           .join("\n")
-      : "- Mantener y sistematizar las buenas prácticas evidenciadas en la sesión observada.\n- Compartir estrategias efectivas que puedan servir como referente para otros docentes.";
+      : "- Mantener y sistematizar las buenas prácticas evidenciadas en la sesión observada.";
 
     const recomendacionesTexto =
       "- Planificar sesiones con mayor articulación entre propósito, actividades, evidencias y criterios de evaluación.\n" +
@@ -440,13 +477,9 @@ export default function App() {
     const detalleCriterios = criteriosEvaluados
       .map(
         (c, index) =>
-          `${index + 1}. ${c.criterio} | Categoría: ${c.categoria} | Puntaje: ${c.puntaje} | Nivel: ${c.letra} - ${c.nivel}`,
+          `${index + 1}. ${c.criterio} | Categoría: ${c.categoria} | Puntaje: ${c.puntaje} | Nivel: ${c.letra} - ${c.nivel}`
       )
       .join("\n");
-
-    const notaSinMarcar = sinMarcar.length
-      ? "\n\nNota: Existen criterios sin puntaje asignado en esta visita. Para una retroalimentación más precisa, se recomienda completar toda la rúbrica."
-      : "";
 
     const texto = `RETROALIMENTACIÓN PEDAGÓGICA
 
@@ -483,11 +516,100 @@ Se reconoce el compromiso profesional del docente y su disposición para continu
 ${detalleCriterios}
 
 Observaciones generales
-${observaciones}${notaSinMarcar}`;
+${observaciones}`;
 
     setRetroalimentacionGenerada(texto);
     descargarTexto(texto, `Retroalimentacion_Docente_${docente.replace(/\s+/g, "_")}.txt`);
   };
+
+  if (!autenticado) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#f8fafc",
+          padding: 16,
+          fontFamily: "Arial, sans-serif",
+          color: "#0f172a",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 380,
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderRadius: 18,
+            padding: 24,
+            boxShadow: "0 2px 8px rgba(15, 23, 42, 0.06)",
+          }}
+        >
+          <h1 style={{ marginTop: 0, marginBottom: 8, fontSize: 26 }}>
+            Acceso al sistema
+          </h1>
+
+          <p style={{ marginTop: 0, color: "#64748b", marginBottom: 20 }}>
+            Ingrese su usuario y contraseña para continuar.
+          </p>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
+              Usuario
+            </label>
+            <input
+              type="text"
+              value={credenciales.usuario}
+              onChange={(e) =>
+                setCredenciales({ ...credenciales, usuario: e.target.value })
+              }
+              placeholder="Ingrese su usuario"
+              style={inputStyle()}
+            />
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
+              Contraseña
+            </label>
+            <input
+              type="password"
+              value={credenciales.clave}
+              onChange={(e) =>
+                setCredenciales({ ...credenciales, clave: e.target.value })
+              }
+              placeholder="Ingrese su contraseña"
+              style={inputStyle()}
+            />
+          </div>
+
+          {errorLogin && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: 10,
+                borderRadius: 10,
+                background: "#fee2e2",
+                color: "#991b1b",
+                fontSize: 14,
+              }}
+            >
+              {errorLogin}
+            </div>
+          )}
+
+          <button
+            onClick={iniciarSesion}
+            style={{ ...buttonStyle("solid"), width: "100%" }}
+          >
+            Iniciar sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -510,6 +632,15 @@ ${observaciones}${notaSinMarcar}`;
           <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
             Por ADEMER HUAHUACONDORI ARANDA - Diseñador de Aprendizajes
           </p>
+
+          <div style={{ marginTop: 12 }}>
+            <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: 13 }}>
+              Usuario activo: {usuarioActivo}
+            </p>
+            <button onClick={cerrarSesion} style={buttonStyle("outline")}>
+              Cerrar sesión
+            </button>
+          </div>
         </div>
 
         <div
@@ -551,7 +682,9 @@ ${observaciones}${notaSinMarcar}`;
           </div>
 
           <div style={{ ...cardStyle(), padding: 24 }}>
-            <div style={{ fontSize: 14, color: "#64748b", marginBottom: 10 }}>Desempeño actual</div>
+            <div style={{ fontSize: 14, color: "#64748b", marginBottom: 10 }}>
+              Desempeño actual
+            </div>
             <div
               style={{
                 ...badgeStyle(estado.clase),
@@ -566,7 +699,7 @@ ${observaciones}${notaSinMarcar}`;
               <div style={{ marginTop: 6 }}>{escala.texto}</div>
             </div>
             <div style={{ marginTop: 12, color: "#64748b" }}>
-              Promedio: {promedio ? promedio.toFixed(2) : "0.00"}
+              Promedio: {promedio.toFixed(2)}
             </div>
           </div>
         </div>
@@ -642,9 +775,7 @@ ${observaciones}${notaSinMarcar}`;
                   <input
                     type="date"
                     value={datosVisita.fecha}
-                    onChange={(e) =>
-                      setDatosVisita({ ...datosVisita, fecha: e.target.value })
-                    }
+                    onChange={(e) => setDatosVisita({ ...datosVisita, fecha: e.target.value })}
                     style={inputStyle()}
                   />
                 </div>
@@ -654,9 +785,7 @@ ${observaciones}${notaSinMarcar}`;
                   <input
                     type="time"
                     value={datosVisita.hora}
-                    onChange={(e) =>
-                      setDatosVisita({ ...datosVisita, hora: e.target.value })
-                    }
+                    onChange={(e) => setDatosVisita({ ...datosVisita, hora: e.target.value })}
                     style={inputStyle()}
                   />
                 </div>
@@ -665,9 +794,7 @@ ${observaciones}${notaSinMarcar}`;
                   <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>Área</label>
                   <input
                     value={datosVisita.area}
-                    onChange={(e) =>
-                      setDatosVisita({ ...datosVisita, area: e.target.value })
-                    }
+                    onChange={(e) => setDatosVisita({ ...datosVisita, area: e.target.value })}
                     placeholder="Ej. Comunicación"
                     style={inputStyle()}
                   />
@@ -679,9 +806,7 @@ ${observaciones}${notaSinMarcar}`;
                   </label>
                   <input
                     value={datosVisita.sesion}
-                    onChange={(e) =>
-                      setDatosVisita({ ...datosVisita, sesion: e.target.value })
-                    }
+                    onChange={(e) => setDatosVisita({ ...datosVisita, sesion: e.target.value })}
                     placeholder="Ej. Comprensión lectora"
                     style={inputStyle()}
                   />
@@ -693,9 +818,7 @@ ${observaciones}${notaSinMarcar}`;
                   </label>
                   <input
                     value={datosVisita.observador}
-                    onChange={(e) =>
-                      setDatosVisita({ ...datosVisita, observador: e.target.value })
-                    }
+                    onChange={(e) => setDatosVisita({ ...datosVisita, observador: e.target.value })}
                     style={inputStyle()}
                   />
                 </div>
@@ -756,7 +879,7 @@ ${observaciones}${notaSinMarcar}`;
                           height: "fit-content",
                         }}
                       >
-                        Puntaje: {evaluacionActual[item.id] || 0}
+                        Puntaje: {evaluacionActual[item.id] ?? 1}
                       </span>
                     </div>
 
@@ -902,7 +1025,7 @@ ${observaciones}${notaSinMarcar}`;
                         {docente.criteriosEvaluados}
                       </td>
                       <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
-                        {docente.promedio ? docente.promedio.toFixed(2) : "0.00"}
+                        {docente.promedio.toFixed(2)}
                       </td>
                       <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
                         <span
