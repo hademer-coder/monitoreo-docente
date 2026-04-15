@@ -366,38 +366,45 @@ function badgeStyle(kind: string = "default"): CSSProperties {
 }
 
 function colorNivel(letra: string, activo = false): CSSProperties {
-  const colores = {
+  const coloresActivos = {
     AD: {
-      fondo: activo ? "#dcfce7" : "#f0fdf4",
+      fondo: "#dcfce7",
       borde: "#22c55e",
       texto: "#166534",
     },
     A: {
-      fondo: activo ? "#dbeafe" : "#eff6ff",
+      fondo: "#dbeafe",
       borde: "#3b82f6",
       texto: "#1d4ed8",
     },
     B: {
-      fondo: activo ? "#fef3c7" : "#fffbeb",
+      fondo: "#fef3c7",
       borde: "#f59e0b",
       texto: "#92400e",
     },
     C: {
-      fondo: activo ? "#fee2e2" : "#fef2f2",
+      fondo: "#fee2e2",
       borde: "#ef4444",
       texto: "#991b1b",
     },
   };
 
-  const c = colores[letra as keyof typeof colores] || colores.C;
+  const neutro = {
+    fondo: "#ffffff",
+    borde: "#cbd5e1",
+    texto: "#0f172a",
+  };
+
+  const c = coloresActivos[letra as keyof typeof coloresActivos] || coloresActivos.C;
+  const estilo = activo ? c : neutro;
 
   return {
     borderRadius: 14,
     padding: 12,
     textAlign: "left",
-    border: `2px solid ${c.borde}`,
-    background: c.fondo,
-    color: c.texto,
+    border: `2px solid ${estilo.borde}`,
+    background: estilo.fondo,
+    color: estilo.texto,
     cursor: "pointer",
     fontWeight: 600,
   };
@@ -1325,7 +1332,7 @@ ${observaciones}`;
                       }}
                     >
                       {niveles.map((nivel: { valor: number; etiqueta: string; letra: string }) => {
-                        const activo = (evaluacionActual[item.id] ?? 1) === nivel.valor;
+                        const activo = (evaluacionActual[item.id] ?? 0) === nivel.valor;
                         return (
                           <button
                             key={nivel.valor}
