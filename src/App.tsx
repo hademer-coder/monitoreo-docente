@@ -1019,8 +1019,11 @@ ${observaciones}`;
             Sistema de Monitoreo Docente
           </h1>
           <p style={{ margin: 0, color: "#475569", fontWeight: 600 }}>
-            Colegio Adventista Túpac Amaru - Sede Jerusalén
+            COLEGIO ADVENTISTA TÚPAC AMARU - SEDE JERUSALÉN
           </p>
+	  <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
+	  Por ADEMER HUAHUACONDORI ARANDA - Diseñador de Aprendizajes
+	  </p>
           <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
             Usuario activo: {usuarioActivo}
           </p>
