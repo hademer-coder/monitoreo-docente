@@ -1160,40 +1160,116 @@ ${observaciones}`;
               style={inputStyle()}
             />
 
-            <div style={{ marginTop: 16, maxHeight: 620, overflowY: "auto", paddingRight: 6 }}>
-              {docentesFiltrados.map((docente) => {
-                const activo = docenteSeleccionado.id === docente.id;
-                return (
-                  <button
-                    key={docente.id}
-                    onClick={() => setDocenteSeleccionado(docente)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      borderRadius: 16,
-                      padding: 14,
-                      border: activo ? "1px solid #111827" : "1px solid #e2e8f0",
-                      background: activo ? "#111827" : "#fff",
-                      color: activo ? "#fff" : "#111827",
-                      marginBottom: 10,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ fontWeight: 700 }}>{docente.nombre}</div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 13,
-                        color: activo ? "#cbd5e1" : "#64748b",
-                      }}
-                    >
-                      {docente.grado}
-                    </div>
-                  </button>
-                );
-              })}
+           <div style={{ marginTop: 16, maxHeight: 620, overflowY: "auto", paddingRight: 6 }}>
+  {docentesFiltrados.map((docente) => {
+    const activo = docenteSeleccionado.id === docente.id;
+
+    const promediosDocente = MONITOREOS.map((n) =>
+      promedioMonitoreo(registros[docente.id]?.[n]?.puntajes || {})
+    );
+
+    const promedioGeneralDocente =
+      promediosDocente.reduce((a, b) => a + b, 0) / promediosDocente.length;
+
+    const escalaDocente = obtenerEscala(promedioGeneralDocente);
+    const estadoColor = badgeStyle(
+      escalaDocente.letra === "AD"
+        ? "success"
+        : escalaDocente.letra === "A"
+          ? "primary"
+          : escalaDocente.letra === "B"
+            ? "warning"
+            : "danger"
+    );
+
+    return (
+      <button
+        key={docente.id}
+        onClick={() => setDocenteSeleccionado(docente)}
+        style={{
+          width: "100%",
+          textAlign: "left",
+          borderRadius: 18,
+          padding: 16,
+          border: activo ? "2px solid #0f172a" : "1px solid #e2e8f0",
+          background: "#ffffff",
+          color: "#0f172a",
+          marginBottom: 12,
+          cursor: "pointer",
+          boxShadow: activo
+            ? "0 8px 24px rgba(15,23,42,0.12)"
+            : "0 2px 8px rgba(15,23,42,0.06)",
+          transform: activo ? "translateY(-1px)" : "none",
+          transition: "all 0.2s ease",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.25 }}>
+              👤 {docente.nombre}
             </div>
+
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 13,
+                color: "#64748b",
+                fontWeight: 600,
+              }}
+            >
+              🎓 {docente.grado}
+            </div>
+
+          <div
+            style={{
+              ...estadoColor,
+              borderRadius: 999,
+              padding: "8px 10px",
+              fontSize: 12,
+              fontWeight: 800,
+              minWidth: 64,
+              textAlign: "center",
+              border: "1px solid rgba(0,0,0,0.06)",
+            }}
+          >
+            {escalaDocente.letra}
           </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            fontWeight: 700,
+            color:
+              escalaDocente.letra === "AD"
+                ? "#166534"
+                : escalaDocente.letra === "A"
+                  ? "#1d4ed8"
+                  : escalaDocente.letra === "B"
+                    ? "#92400e"
+                    : "#991b1b",
+          }}
+        >
+          {escalaDocente.texto}
+        </div>
+
+        {activo && (
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: "#0f172a",
+              fontWeight: 700,
+            }}
+          >
+            Seleccionado
+          </div>
+        )}
+      </button>
+    );
+  })}
+</div>
 
           <div>
             {vistaActiva === "evaluacion" && (
