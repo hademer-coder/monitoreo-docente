@@ -889,7 +889,7 @@ ${observaciones}`;
         rows.push(["Hora", registro.datosVisita.hora || "-"]);
         rows.push(["Área", registro.datosVisita.area || "-"]);
         rows.push(["Sesión", registro.datosVisita.sesion || "-"]);
-        rows.push(["Observador", registro.datosVisita.observador || "-"]);
+        rows.push(["Acompañante pedagógico", registro.datosVisita.observador || "-"]);
         rows.push(["Observaciones", registro.datosVisita.observacionesGenerales || "-"]);
         rows.push(["Promedio", Number(promedio.toFixed(2))]);
         rows.push(["Desempeño", `${escala.letra} - ${escala.texto}`]);
@@ -1014,21 +1014,82 @@ ${observaciones}`;
       }}
     >
       <div style={{ maxWidth: 1300, margin: "0 auto" }}>
-        <div style={{ marginBottom: 24, textAlign: "center" }}>
-          <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
-            Sistema de Monitoreo Docente
+        <div
+          style={{
+            marginBottom: 30,
+            textAlign: "center",
+            background: "#ffffff",
+            borderRadius: 20,
+            padding: "30px 20px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+          }}
+        >
+          <img
+            src="/logo-cata.png"
+            alt="Logo CATA"
+            style={{
+              width: 130,
+              height: "auto",
+              marginBottom: 12,
+              objectFit: "contain",
+            }}
+          />
+
+          <h1
+            style={{
+              fontSize: 30,
+              fontWeight: 900,
+              marginBottom: 6,
+              color: "#0f172a",
+              letterSpacing: 0.5,
+            }}
+          >
+            SISTEMA DE MONITOREO Y ACOMPAÑAMIENTO PEDAGÓGICO
           </h1>
-          <p style={{ margin: 0, color: "#475569", fontWeight: 600 }}>
+
+          <p
+            style={{
+              margin: 0,
+              color: "#334155",
+              fontWeight: 600,
+              fontSize: 15,
+            }}
+          >
             COLEGIO ADVENTISTA TÚPAC AMARU - SEDE JERUSALÉN
           </p>
-	  <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
-	  Por ADEMER HUAHUACONDORI ARANDA - Diseñador de Aprendizajes
-	  </p>
-          <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
+
+          <p
+            style={{
+              margin: "6px 0 0",
+              color: "#64748b",
+              fontSize: 13,
+            }}
+          >
+            Por ADEMER HUAHUACONDORI ARANDA - Diseñador de Aprendizajes
+          </p>
+
+          <p
+            style={{
+              margin: "6px 0 0",
+              color: "#94a3b8",
+              fontSize: 12,
+            }}
+          >
             Usuario activo: {usuarioActivo}
           </p>
-          <div style={{ marginTop: 12 }}>
-            <button onClick={cerrarSesion} style={buttonStyle("outline")}>
+
+          <div style={{ marginTop: 14 }}>
+            <button
+              onClick={cerrarSesion}
+              style={{
+                borderRadius: 12,
+                padding: "8px 16px",
+                border: "1px solid #cbd5e1",
+                background: "#f8fafc",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
               Cerrar sesión
             </button>
           </div>
@@ -1215,7 +1276,7 @@ ${observaciones}`;
 
                   <div>
                     <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
-                      Observador
+                      Acompañante pedagógico
                     </label>
                     <input
                       value={datosVisita.observador}
@@ -1241,9 +1302,6 @@ ${observaciones}`;
                   >
                     <div style={{ fontSize: 36, fontWeight: 800 }}>{escalaActual.letra}</div>
                     <div style={{ marginTop: 6 }}>{escalaActual.texto}</div>
-                  </div>
-                  <div style={{ marginTop: 12, color: "#64748b" }}>
-                    Promedio: {promedioActual.toFixed(2)}
                   </div>
                 </div>
 
